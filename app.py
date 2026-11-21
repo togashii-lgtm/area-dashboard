@@ -101,6 +101,7 @@ def load_data():
     pop_path = os.path.join(DATA_DIR, "population.csv")
     housing_path = os.path.join(DATA_DIR, "housing.csv")
     od_path = os.path.join(DATA_DIR, "migration_od.csv")
+    subsidy_path = os.path.join(DATA_DIR, "subsidies.csv")
 
     dfs = {}
     if os.path.exists(pop_path):
@@ -126,6 +127,12 @@ def load_data():
     else:
         dfs["migration_od"] = pd.DataFrame()
 
+    if os.path.exists(subsidy_path):
+        df_sub = pd.read_csv(subsidy_path)
+        dfs["subsidies"] = df_sub
+    else:
+        dfs["subsidies"] = pd.DataFrame()
+
     return dfs
 
 
@@ -133,6 +140,7 @@ data = load_data()
 df_pop = data["population"]
 df_housing = data["housing"]
 df_od = data["migration_od"]
+df_subsidies = data["subsidies"]
 
 # ============================================================
 # 市の定義＆地理座標（緯度・経度）
@@ -415,12 +423,13 @@ def download_button(df, filename, label="📥 表データをCSVダウンロー�
 st.title("🏠 商圏エリアデータダッシュボード")
 st.caption(f"選択中: {', '.join(selected_cities)}（計 {len(selected_cities)} 市）")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📋 概要・KPI",
     "👥 人口・世帯構造",
     "🚚 人の移動（地図フローマップ）",
     "🏗️ 住宅着工統計",
     "🏘️ 住宅ストック・空き家",
+    "🎁 補助金・助成金ナビ",
     "📖 指標解説ガイド",
 ])
 
@@ -1128,9 +1137,133 @@ with tab5:
 
 
 # ============================================================
-# タブ6: 初心者向け 指標解説ガイド
+# タブ6: 🎁 補助金・助成金ナビ（国・愛知県・11市）
 # ============================================================
 with tab6:
+    st.header("🎁 補助金・助成金ナビ（国・愛知県・商圏11市）")
+
+    st.markdown(
+        """
+        <div style="background-color: #fff8e1; border-left: 4px solid #ffb300; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; font-size: 0.9rem;">
+            ⚠️ <b>タイムラグおよび最新状況に関するご注意：</b><br>
+            補助金・助成金は国の補正予算や自治体の年度予算上限、受付期間の終了に伴い随時改定されます。<br>
+            各制度に記載の<b>【データ確認日】</b>をご確認の上、実務・顧客提案の際は必ず各制度の<b>【🔗 公式ページ】</b>リンクから最新の受付状況をご確認ください。
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if not df_subsidies.empty:
+        # フィルターエリア
+        filter_col1, filter_col2, filter_col3 = st.columns([2, 2, 3])
+
+        all_target_areas = ["すべて"] + sorted(df_subsidies["target_area"].unique().tolist())
+        all_categories = ["すべて"] + sorted(df_subsidies["category"].unique().tolist())
+
+        with filter_col1:
+            selected_sub_area = st.selectbox(
+                "対象エリア・自治体",
+                all_target_areas,
+                index=0,
+                key="sub_area_filter"
+            )
+
+        with filter_col2:
+            selected_sub_cat = st.selectbox(
+                "支援ジャンル",
+                all_categories,
+                index=0,
+                key="sub_cat_filter"
+            )
+
+        with filter_col3:
+            search_kw = st.text_input(
+                "🔍 キーワード検索（制度名・要件など）",
+                placeholder="例: 耐震、エコホーム、子育て、ZEH、解体",
+                key="sub_search_kw"
+            )
+
+        # 絞り込み処理
+        sub_filtered = df_subsidies.copy()
+
+        if selected_sub_area != "すべて":
+            sub_filtered = sub_filtered[sub_filtered["target_area"] == selected_sub_area]
+
+        if selected_sub_cat != "すべて":
+            sub_filtered = sub_filtered[sub_filtered["category"] == selected_sub_cat]
+
+        if search_kw:
+            sub_filtered = sub_filtered[
+                sub_filtered["name"].str.contains(search_kw, na=False)
+                | sub_filtered["target_requirements"].str.contains(search_kw, na=False)
+                | sub_filtered["note"].str.contains(search_kw, na=False)
+            ]
+
+        st.caption(f"該当件数: {len(sub_filtered)} 件 / 全 {len(df_subsidies)} 件")
+
+        # カード一覧表示
+        if not sub_filtered.empty:
+            for idx, row in sub_filtered.iterrows():
+                with st.container():
+                    # バッジカラー
+                    level_color = "#1f77b4" if row["level"] == "国" else ("#2ca02c" if row["level"] == "愛知県" else "#ff7f0e")
+                    
+                    st.markdown(
+                        f"""
+                        <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px 18px; margin-bottom: 12px; background-color: #fafafa;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 6px;">
+                                <div>
+                                    <span style="background-color: {level_color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-right: 6px;">
+                                        {row['level']}（{row['target_area']}）
+                                    </span>
+                                    <span style="background-color: #e9ecef; color: #495057; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">
+                                        {row['category']}
+                                    </span>
+                                    <h4 style="margin: 6px 0 2px 0; color: #212529; font-size: 1.1rem;">{row['name']}</h4>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span style="background-color: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 0.95rem;">
+                                        💰 {row['grant_amount']}
+                                    </span>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.88rem; color: #444; margin: 6px 0;">
+                                <b>【主な対象・要件】</b> {row['target_requirements']}
+                            </div>
+                            <div style="font-size: 0.82rem; color: #666; margin-bottom: 8px;">
+                                💡 <b>備考：</b> {row['note']}
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #ddd; padding-top: 8px; font-size: 0.8rem; color: #888;">
+                                <span>📅 データ確認日: <b>{row['data_date']}</b></span>
+                                <a href="{row['official_url']}" target="_blank" style="background-color: #1f77b4; color: white; padding: 4px 12px; border-radius: 4px; text-decoration: none; font-size: 0.8rem; font-weight: bold;">
+                                    🔗 公式自治体ページへ ↗
+                                </a>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+            st.markdown("---")
+            # ダウンロードボタン
+            csv_sub_data = sub_filtered.to_csv(index=False, encoding="utf-8-sig")
+            st.download_button(
+                label="📥 絞り込んだ補助金一覧をCSVダウンロード（社内提案書・チラシ用）",
+                data=csv_sub_data,
+                file_name=f"subsidies_{selected_sub_area}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        else:
+            st.info("条件に一致する補助金・助成金は見つかりませんでした。絞り込み条件を変更してください。")
+    else:
+        st.info("補助金データが登録されていません。")
+
+
+# ============================================================
+# タブ7: 初心者向け 指標解説ガイド
+# ============================================================
+with tab7:
     st.header("📖 住宅・不動産マーケティング指標の読み解きガイド")
     st.markdown(
         """
@@ -1187,9 +1320,9 @@ st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; color: #888; font-size: 0.85em;">
-        📊 商圏エリアデータダッシュボード v1.4（地図フローマップ実装版）<br>
+        📊 商圏エリアデータダッシュボード v1.5（補助金・助成金ナビ実装版）<br>
         データ出典: <a href="https://www.e-stat.go.jp/" target="_blank">e-Stat（政府統計の総合窓口）</a>
-        ・社会・人口統計体系 / 建築着工統計調査 / 住民基本台帳人口移動報告（2022年）
+        ・社会・人口統計体系 / 建築着工統計調査 / 住民基本台帳人口移動報告 / 各省庁・自治体公表資料
     </div>
     """,
     unsafe_allow_html=True,
