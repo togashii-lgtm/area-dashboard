@@ -20,31 +20,20 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# モバイル対応カスタムCSS
 st.markdown(
     """
     <style>
-    /* モバイルでのフォントサイズ・パディング調整 */
     @media (max-width: 768px) {
         .block-container {
             padding-top: 1.5rem !important;
             padding-left: 0.8rem !important;
             padding-right: 0.8rem !important;
         }
-        h1 {
-            font-size: 1.5rem !important;
-        }
-        h2 {
-            font-size: 1.25rem !important;
-        }
-        h3 {
-            font-size: 1.1rem !important;
-        }
-        .stMetric {
-            padding: 8px !important;
-        }
+        h1 { font-size: 1.5rem !important; }
+        h2 { font-size: 1.25rem !important; }
+        h3 { font-size: 1.1rem !important; }
+        .stMetric { padding: 8px !important; }
     }
-    /* 解説ボックスのスタイル */
     .guide-box {
         background-color: #f0f7ff;
         border-left: 4px solid #1f77b4;
@@ -72,7 +61,6 @@ st.markdown(
 # ============================================================
 
 def check_password():
-    """簡易パスワード保護"""
     try:
         correct_password = st.secrets["password"]
     except (FileNotFoundError, KeyError):
@@ -110,21 +98,33 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 @st.cache_data(ttl=3600)
 def load_data():
-    """CSVファイルからデータを読み込む"""
     pop_path = os.path.join(DATA_DIR, "population.csv")
     housing_path = os.path.join(DATA_DIR, "housing.csv")
-    indicators_path = os.path.join(DATA_DIR, "housing_indicators.csv")
+    od_path = os.path.join(DATA_DIR, "migration_od.csv")
 
     dfs = {}
-    for name, path in [("population", pop_path), ("housing", housing_path), ("indicators", indicators_path)]:
-        if os.path.exists(path):
-            df = pd.read_csv(path, dtype={"city_code": str, "year": str})
-            df["value"] = pd.to_numeric(df["value"], errors="coerce")
-            df["year"] = df["year"].astype(str)
-            dfs[name] = df
-        else:
-            st.warning(f"⚠️ データファイルが見つかりません: {path}")
-            dfs[name] = pd.DataFrame()
+    if os.path.exists(pop_path):
+        df_p = pd.read_csv(pop_path, dtype={"city_code": str, "year": str})
+        df_p["value"] = pd.to_numeric(df_p["value"], errors="coerce")
+        df_p["year"] = df_p["year"].astype(str)
+        dfs["population"] = df_p
+    else:
+        dfs["population"] = pd.DataFrame()
+
+    if os.path.exists(housing_path):
+        df_h = pd.read_csv(housing_path, dtype={"city_code": str, "year": str})
+        df_h["value"] = pd.to_numeric(df_h["value"], errors="coerce")
+        df_h["year"] = df_h["year"].astype(str)
+        dfs["housing"] = df_h
+    else:
+        dfs["housing"] = pd.DataFrame()
+
+    if os.path.exists(od_path):
+        df_od = pd.read_csv(od_path, dtype={"city_code": str, "partner_code": str, "year": str})
+        df_od["persons"] = pd.to_numeric(df_od["persons"], errors="coerce")
+        dfs["migration_od"] = df_od
+    else:
+        dfs["migration_od"] = pd.DataFrame()
 
     return dfs
 
@@ -132,7 +132,7 @@ def load_data():
 data = load_data()
 df_pop = data["population"]
 df_housing = data["housing"]
-df_indicators = data["indicators"]
+df_od = data["migration_od"]
 
 # ============================================================
 # 市の定義
@@ -155,7 +155,6 @@ CITIES = {
 CITY_NAMES = {v["name"]: k for k, v in CITIES.items()}
 ALL_CITY_NAMES = [CITIES[k]["name"] for k in sorted(CITIES.keys())]
 
-# カラーパレット
 CITY_COLORS = {
     "岡崎市": "#1f77b4", "碧南市": "#aec7e8", "刈谷市": "#ff7f0e",
     "豊田市": "#ffbb78", "安城市": "#2ca02c", "西尾市": "#98df8a",
@@ -164,7 +163,7 @@ CITY_COLORS = {
 }
 
 # ============================================================
-# サイドバー（全選択・全解除ボタン付き）
+# サイドバー
 # ============================================================
 
 with st.sidebar:
@@ -172,7 +171,6 @@ with st.sidebar:
     st.markdown("**愛知県11市** の市場データ分析ツール")
     st.markdown("---")
 
-    # エリアフィルター
     area_filter = st.multiselect(
         "エリアで絞り込み",
         ["西三河", "知多"],
@@ -185,11 +183,9 @@ with st.sidebar:
         if CITIES[k]["area"] in area_filter
     ]
 
-    # 全選択・全解除ボタン用のセッションステート初期化
     if "selected_cities" not in st.session_state:
         st.session_state["selected_cities"] = available_cities
     else:
-        # エリアフィルターが変わった場合、存在しない市を除外
         st.session_state["selected_cities"] = [
             c for c in st.session_state["selected_cities"] if c in available_cities
         ]
@@ -209,14 +205,13 @@ with st.sidebar:
         default=st.session_state["selected_cities"],
         key="city_selector"
     )
-    # セッションステート同期
     st.session_state["selected_cities"] = selected_cities
 
     st.markdown("---")
     st.markdown("### 📊 表示期間の設定")
 
     year_range_pop = st.slider(
-        "人口データの年範囲",
+        "人口・世帯データの年範囲",
         min_value=1980, max_value=2025,
         value=(2000, 2024),
         key="year_pop"
@@ -231,7 +226,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption("データ出典: e-Stat（政府統計の総合窓口）")
-    st.caption("社会・人口統計体系 市区町村データ")
+    st.caption("・社会・人口統計体系（総務省統計局）")
+    st.caption("・住民基本台帳人口移動報告（2022年）")
 
 
 selected_codes = [CITY_NAMES[name] for name in selected_cities if name in CITY_NAMES]
@@ -242,11 +238,10 @@ if not selected_codes:
 
 
 # ============================================================
-# 解説コンポーネント関数
+# 解説コンポーネント
 # ============================================================
 
 def show_guide(title, rule, meaning, business_point):
-    """各指標の集計ルールと読み解き方を初心者向けに表示する"""
     with st.expander(f"💡 【解説】{title} の集計ルールと見方（クリックで開閉）"):
         st.markdown(
             f"""
@@ -262,7 +257,7 @@ def show_guide(title, rule, meaning, business_point):
 
 
 # ============================================================
-# グラフ描画ヘルパー関数（モバイル最適化）
+# グラフ描画ヘルパー関数
 # ============================================================
 
 def filter_df(df, codes, indicator_code, year_min, year_max):
@@ -351,10 +346,10 @@ def download_button(df, filename, label="📥 表データをCSVダウンロー�
 st.title("🏠 商圏エリアデータダッシュボード")
 st.caption(f"選択中: {', '.join(selected_cities)}（計 {len(selected_cities)} 市）")
 
-# タブ構成
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📋 概要・KPI",
-    "👥 人口・世帯",
+    "👥 人口・世帯構造",
+    "🚚 人の移動（流入・流出分析）",
     "🏗️ 住宅着工統計",
     "🏘️ 住宅ストック・空き家",
     "📖 指標解説ガイド",
@@ -368,13 +363,12 @@ with tab1:
     
     show_guide(
         "商圏サマリーとKPIの見方",
-        "最新年次（人口は国勢調査年、着工は直近期）の各市数値を合算・ランキング化したものです。",
-        "選択した市全体の市場規模感（総人口・年間着工総数）と、どの自治体が商圏内で最大のボリュームを持っているかが一目で分かります。",
-        "着工戸数上位の市は『シェア拡大・主力営業エリア』、人口が増加している市は『木造賃貸や分譲の新規開拓エリア』としてリソース配分を検討できます。"
+        "最新年次の各市数値を合算・ランキング化したものです。",
+        "選択した商圏全体の市場規模感（総人口・年間着工総数）と、どの自治体が最大のマーケットボリュームを持っているかが一目で分かります。",
+        "着工戸数上位の市は『シェア拡大・主力営業エリア』、人口・世帯が増加している市は『木造賃貸アパートや分譲の新規開拓エリア』としてリソース配分を検討できます。"
     )
 
     if not df_pop.empty and not df_housing.empty:
-        # 最新年の人口データ
         latest_pop = df_pop[
             (df_pop["city_code"].isin(selected_codes))
             & (df_pop["indicator_code"] == "A1101")
@@ -384,7 +378,6 @@ with tab1:
             latest_year = latest_pop["year_int"].max()
             latest_pop = latest_pop[latest_pop["year_int"] == latest_year]
 
-        # 最新年の着工データ
         latest_starts = df_housing[
             (df_housing["city_code"].isin(selected_codes))
             & (df_housing["indicator_code"] == "H1800")
@@ -394,7 +387,6 @@ with tab1:
             latest_starts_year = latest_starts["year_int"].max()
             latest_starts = latest_starts[latest_starts["year_int"] == latest_starts_year]
 
-        # KPIカード（モバイルでも見やすい2列×2行構成）
         kpi_col1, kpi_col2 = st.columns(2)
         with kpi_col1:
             if not latest_pop.empty:
@@ -429,7 +421,6 @@ with tab1:
 
         st.markdown("---")
 
-        # ランキング表示
         st.subheader("🏆 商圏内ランキング比較")
         rank_col1, rank_col2 = st.columns(2)
 
@@ -451,7 +442,6 @@ with tab1:
                 rank_starts["着工数（戸）"] = rank_starts["着工数（戸）"].apply(lambda x: f"{x:,.0f}")
                 st.dataframe(rank_starts, use_container_width=True)
 
-        # シェア円グラフ
         st.subheader(f"📊 着工新設住宅の商圏シェア（{latest_starts_year}年）")
         if not latest_starts.empty:
             fig_share = px.pie(
@@ -468,54 +458,125 @@ with tab1:
 
 
 # ============================================================
-# タブ2: 人口・世帯
+# タブ2: 人口・世帯構造（単身・家族・現住居持ち家/借家）
 # ============================================================
 with tab2:
-    st.header("👥 人口・世帯トレンド")
+    st.header("👥 人口・世帯構造（一人暮らし・家族・持ち家比率）")
 
     if not df_pop.empty:
         y_min, y_max = year_range_pop
 
-        # 1. 総人口推移
-        st.subheader("1. 総人口の推移")
+        # 1. 世帯数推移（一人暮らし vs ファミリー世帯）
+        st.subheader("1. 世帯数推移と世帯構成（一人暮らし vs 家族）")
         show_guide(
-            "総人口の推移",
-            "総務省「国勢調査」および「人口推計」に基づく各市町村の人口実数。",
-            "自治体の長期的な成長・衰退傾向。人口が増加している市は、住宅・建築市場全体の需要パイが維持・拡大しています。",
-            "人口増加市（または減少が緩やかな市）は、注文住宅の一次取得層や賃貸需要が長期的に期待できる最優先エリアです。"
+            "単独世帯（一人暮らし）と核家族世帯（家族）",
+            "国勢調査による世帯構造の内訳。①単独世帯＝1人暮らし、②核家族世帯＝夫婦のみ・夫婦と子・ひとり親と子、③その他親族世帯＝二世代・三世代同居など。",
+            "『住宅を借りる・建てる単位は人頭ではなく世帯』です。単身世帯の増加はアパート需要に直結し、核家族世帯は注文・分譲住宅のメインターゲットになります。",
+            "単身世帯急増エリアは『木造単身向け賃貸アパート』の最適地。核家族世帯が多いエリアは『ファミリー向け分譲・注文住宅』に注力すべきです。"
         )
+
+        detail_city_hh = st.selectbox(
+            "世帯構成の内訳を見る市を選択してください",
+            selected_cities,
+            key="detail_city_hh"
+        )
+        detail_code_hh = CITY_NAMES.get(detail_city_hh, "")
+
+        if detail_code_hh:
+            hh_codes = {
+                "A810105": "単独世帯(一人暮らし)",
+                "A810102": "核家族世帯(ファミリー)",
+                "A810103": "その他親族世帯(二・三世代)"
+            }
+            df_hh = filter_df_multi(df_pop, [detail_code_hh], list(hh_codes.keys()), 1980, 2025)
+            if not df_hh.empty:
+                df_hh["hh_type"] = df_hh["indicator_code"].map(hh_codes)
+                fig_hh = px.bar(
+                    df_hh.sort_values("year"),
+                    x="year", y="value", color="hh_type",
+                    barmode="stack",
+                    title=f"{detail_city_hh}：世帯構成の推移（一人暮らし vs ファミリー）",
+                    labels={"year": "年", "value": "世帯数", "hh_type": "世帯タイプ"},
+                    color_discrete_map={
+                        "単独世帯(一人暮らし)": "#ff7f0e",
+                        "核家族世帯(ファミリー)": "#1f77b4",
+                        "その他親族世帯(二・三世代)": "#2ca02c"
+                    },
+                )
+                fig_hh.update_layout(
+                    height=380,
+                    legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5),
+                    margin=dict(l=15, r=15, t=40, b=40),
+                )
+                st.plotly_chart(fig_hh, use_container_width=True)
+
+                pivot_hh = df_hh.pivot_table(
+                    values="value", index="year", columns="hh_type", aggfunc="first"
+                ).sort_index(ascending=False)
+                st.dataframe(pivot_hh.style.format("{:,.0f}"), use_container_width=True)
+
+        st.markdown("---")
+
+        # 2. 現住居の所有関係（持ち家世帯 vs 持ち家以外/借家世帯）
+        st.subheader("2. 現住居の所有形態（持ち家世帯 vs 持ち家以外/賃貸世帯）")
+        show_guide(
+            "現住居の持ち家世帯数 vs 借家（持ち家以外）世帯数",
+            "住宅・土地統計調査に基づく、今住んでいる住居が『自己所有（持ち家）』か『賃貸（借家＝民間アパート・公営等）』かの世帯数。",
+            "【持ち家世帯＝リフォーム・建替え・アパート土地活用のターゲット】\n【借家世帯＝これから持ち家を建てる/買う一次取得の最大の見込み客プール、または優良賃貸への住み替え層】。",
+            "借家世帯数が多く比率が高い市は、注文住宅の一次取得営業や分譲建売の反響が非常に獲りやすいエリアです。"
+        )
+
+        detail_city_tenure = st.selectbox(
+            "住宅所有関係を見る市を選択してください",
+            selected_cities,
+            key="detail_city_tenure"
+        )
+        detail_code_tenure = CITY_NAMES.get(detail_city_tenure, "")
+
+        if detail_code_tenure and not df_housing.empty:
+            tenure_codes = {
+                "H1310": "持ち家世帯",
+                "H1322": "民営借家(アパート・マンション等)",
+                "H1321": "公営・UR借家"
+            }
+            df_tenure = filter_df_multi(df_housing, [detail_code_tenure], list(tenure_codes.keys()), 1980, 2025)
+            if not df_tenure.empty:
+                df_tenure["tenure_type"] = df_tenure["indicator_code"].map(tenure_codes)
+                fig_tenure = px.bar(
+                    df_tenure.sort_values("year"),
+                    x="year", y="value", color="tenure_type",
+                    barmode="stack",
+                    title=f"{detail_city_tenure}：現住居の所有形態（持ち家 vs 賃貸世帯数）",
+                    labels={"year": "年", "value": "世帯数", "tenure_type": "所有関係"},
+                    color_discrete_map={
+                        "持ち家世帯": "#1f77b4",
+                        "民営借家(アパート・マンション等)": "#ff7f0e",
+                        "公営・UR借家": "#aec7e8"
+                    },
+                )
+                fig_tenure.update_layout(
+                    height=380,
+                    legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5),
+                    margin=dict(l=15, r=15, t=40, b=40),
+                )
+                st.plotly_chart(fig_tenure, use_container_width=True)
+
+                pivot_tenure = df_tenure.pivot_table(
+                    values="value", index="year", columns="tenure_type", aggfunc="first"
+                ).sort_index(ascending=False)
+                st.dataframe(pivot_tenure.style.format("{:,.0f}"), use_container_width=True)
+
+        st.markdown("---")
+
+        # 3. 総人口推移
+        st.subheader("3. 総人口の推移")
         df_total_pop = filter_df(df_pop, selected_codes, "A1101", y_min, y_max)
         if not df_total_pop.empty:
             fig = make_line_chart(df_total_pop, "総人口の推移（人）", "人口（人）")
             st.plotly_chart(fig, use_container_width=True)
-            pivot = make_pivot_table(df_total_pop)
-            st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
-            download_button(pivot, "population_total.csv")
 
-        # 2. 世帯数推移
-        st.subheader("2. 世帯数の推移")
-        show_guide(
-            "世帯数の推移",
-            "一般世帯＋施設等の世帯数の合計。",
-            "【最重要】人口が横ばい・減少していても、世帯数が増加しているケースが多々あります（単身化・核家族化）。住宅需要は『人頭』ではなく『世帯単位』で発生するため、世帯数が増えている間は住居需要が旺盛です。",
-            "世帯数増加率が高いエリアは、木造賃貸アパート（単身〜2人向け）やコンパクト分譲住宅の強い引き合いが見込めます。"
-        )
-        df_households = filter_df(df_pop, selected_codes, "A1500", y_min, y_max)
-        if not df_households.empty:
-            fig = make_line_chart(df_households, "世帯数の推移（世帯）", "世帯数")
-            st.plotly_chart(fig, use_container_width=True)
-            pivot = make_pivot_table(df_households)
-            st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
-            download_button(pivot, "households.csv")
-
-        # 3. 年齢3区分構成
-        st.subheader("3. 年齢階級別の人口構成")
-        show_guide(
-            "年齢3区分の比率（年少・生産年齢・老年）",
-            "15歳未満（年少＝子ども）、15〜64歳（生産年齢＝働き盛り）、65歳以上（老年＝シニア）。",
-            "年少人口が多い市は子育てファミリーが多く注文住宅需要が強い。高齢者比率が高い市は既存住宅のリフォームや相続・建て替え需要が厚い。",
-            "子育て層が多い市は『注文・分譲住宅』、シニア比率が高い市は『断熱・バリアフリーリフォーム』や『木造賃貸アパートによる遊休地活用提案』が刺さります。"
-        )
+        # 4. 年齢構成
+        st.subheader("4. 年齢3区分（子育て世代・現役・シニア）")
         age_codes = {"A1301": "15歳未満(子育て層)", "A1302": "15-64歳(生産年齢)", "A1303": "65歳以上(シニア層)"}
         df_age = filter_df_multi(df_pop, selected_codes, list(age_codes.keys()), y_min, y_max)
         if not df_age.empty:
@@ -539,43 +600,132 @@ with tab2:
             )
             st.plotly_chart(fig_age, use_container_width=True)
 
-        # 4. 転入・転出（社会増減）
-        st.subheader("4. 転入・転出（人の流入と流出）")
-        show_guide(
-            "転入者数・転出者数（社会移動）",
-            "住民基本台帳に基づく他市区町村からの転入および他市区町村への転出者数。",
-            "『転入 ＞ 転出（転入超過）』であれば、雇用の強さや住環境の良さで周辺から人を引きつけている証拠。賃貸の空室率が低く、将来の住宅購入見込み客が常に流入しています。",
-            "転入超過エリアは賃貸アパート経営の安全性が高く、地主様へのアパート建築提案で強い説得材料になります。"
-        )
-        col_in, col_out = st.columns(2)
-        with col_in:
-            df_in = filter_df(df_pop, selected_codes, "A1700", y_min, y_max)
-            if not df_in.empty:
-                fig = make_line_chart(df_in, "転入者数（人）", "人数（人）")
-                st.plotly_chart(fig, use_container_width=True)
-        with col_out:
-            df_out = filter_df(df_pop, selected_codes, "A1701", y_min, y_max)
-            if not df_out.empty:
-                fig = make_line_chart(df_out, "転出者数（人）", "人数（人）")
-                st.plotly_chart(fig, use_container_width=True)
-
 
 # ============================================================
-# タブ3: 住宅着工統計
+# タブ3: 人の移動（流入・流出分析＆転入超過）
 # ============================================================
 with tab3:
+    st.header("🚚 人の移動（転入超過・流入元・流出先分析）")
+
+    # 1. 転入超過数（純移動数）
+    st.subheader("1. 社会増減数（転入超過数 ＝ ネットで何人増えたか？）")
+    show_guide(
+        "転入超過数（ネット純移動数）の意味",
+        "【計算式】転入超過数 ＝ 転入者数（引っ越してきた人） － 転出者数（出ていった人）。年間で他自治体から差し引き何人増減したかを表します。",
+        "・プラス（青色） ＝ 人が引き寄せられて純増している『選ばれている街』。\n・マイナス（赤色） ＝ 人が流出している街。\n単なる人口数ではなく、『街の勢い・求心力・住宅需要の流入』を直接表します。",
+        "転入超過が続いている市は、賃貸住宅の空室リスクが極めて低く、一次取得（注文・分譲住宅）の顧客が常に新規流入している最優先エリアです。"
+    )
+
+    y_min, y_max = year_range_pop
+    df_net_mig = filter_df(df_pop, selected_codes, "A1702", y_min, y_max)
+    if not df_net_mig.empty:
+        fig_net = px.bar(
+            df_net_mig.sort_values(["year", "city_name"]),
+            x="year", y="value", color="city_name",
+            barmode="group",
+            title="年間 転入超過数の推移（人/年）",
+            labels={"year": "年", "value": "転入超過数（人）", "city_name": "市名"},
+            color_discrete_map=CITY_COLORS,
+        )
+        fig_net.add_hline(y=0, line_dash="dash", line_color="black")
+        fig_net.update_layout(
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5),
+            margin=dict(l=15, r=15, t=40, b=40),
+            height=380,
+        )
+        st.plotly_chart(fig_net, use_container_width=True)
+
+        pivot_net = make_pivot_table(df_net_mig)
+        st.dataframe(pivot_net.style.format("{:+,.0f}"), use_container_width=True)
+        download_button(pivot_net, "net_migration.csv")
+
+    st.markdown("---")
+
+    # 2. 市区町村別の流入元・流出先分析 (ODデータ)
+    st.subheader("2. 📍 市区町村別の『流入元』と『流出先』（どこから来て、どこへ行くか？）")
+    show_guide(
+        "移動元・移動先（ODデータ）の読み解き方",
+        "総務省統計局『住民基本台帳人口移動報告（2022年年報）』に基づく、市区町村間の具体的な人の流れ（どこから引っ越してきたか／どこへ引っ越していったか）。",
+        "自社の商圏で家を建てる・借りる人が『近隣のどの市や名古屋市から流入しているのか』『周辺のどの市へ流出しているのか』の勢力図が分かります。",
+        "・流入元上位の市 ＝ チラシ配布・Web広告（ポータル・SNS）の配信ターゲットエリア。\n・流出先上位の市 ＝ 商圏外へ競合や地価高騰で逃げられているエリア。分譲用地の仕入れや競合対策のヒント。"
+    )
+
+    od_city = st.selectbox(
+        "流入元・流出先を詳しく調べる市を選択してください",
+        selected_cities,
+        key="od_city_select"
+    )
+
+    if not df_od.empty and od_city:
+        city_od_data = df_od[df_od["city_name"] == od_city].copy()
+
+        # 都道府県名や全国計の粗いデータを除外して市区町村レベルに絞る
+        exclude_partners = ["全国", "愛知県", "北海道", "東京都", "大阪府", "神奈川県", "静岡県", "三重県", "岐阜県"]
+        city_od_filtered = city_od_data[~city_od_data["partner_name"].isin(exclude_partners)].copy()
+
+        col_inflow, col_outflow = st.columns(2)
+
+        with col_inflow:
+            st.markdown(f"**📥 【流入元】{od_city} に引っ越してきた自治体 TOP10**")
+            inflow_df = city_od_filtered[city_od_filtered["flow_type"] == "転入元（流入元）"].sort_values("persons", ascending=False).head(10)
+            if not inflow_df.empty:
+                fig_in = px.bar(
+                    inflow_df.sort_values("persons", ascending=True),
+                    x="persons", y="partner_name", orientation="h",
+                    title=f"{od_city} への転入元自治体 TOP10（2022年）",
+                    labels={"persons": "人数（人）", "partner_name": "転入元の自治体"},
+                    color_discrete_sequence=["#1f77b4"],
+                )
+                fig_in.update_layout(height=350, margin=dict(l=10, r=10, t=35, b=20))
+                st.plotly_chart(fig_in, use_container_width=True)
+
+                inflow_table = inflow_df[["partner_name", "persons"]].reset_index(drop=True)
+                inflow_table.index = inflow_table.index + 1
+                inflow_table.columns = ["転入元自治体", "人数（人）"]
+                inflow_table["人数（人）"] = inflow_table["人数（人）"].apply(lambda x: f"{x:,.0f}")
+                st.dataframe(inflow_table, use_container_width=True)
+            else:
+                st.info("データがありません。")
+
+        with col_outflow:
+            st.markdown(f"**📤 【流出先】{od_city} から引っ越していった自治体 TOP10**")
+            outflow_df = city_od_filtered[city_od_filtered["flow_type"] == "転出先（流出先）"].sort_values("persons", ascending=False).head(10)
+            if not outflow_df.empty:
+                fig_out = px.bar(
+                    outflow_df.sort_values("persons", ascending=True),
+                    x="persons", y="partner_name", orientation="h",
+                    title=f"{od_city} からの転出先自治体 TOP10（2022年）",
+                    labels={"persons": "人数（人）", "partner_name": "転出先の自治体"},
+                    color_discrete_sequence=["#ff7f0e"],
+                )
+                fig_out.update_layout(height=350, margin=dict(l=10, r=10, t=35, b=20))
+                st.plotly_chart(fig_out, use_container_width=True)
+
+                outflow_table = outflow_df[["partner_name", "persons"]].reset_index(drop=True)
+                outflow_table.index = outflow_table.index + 1
+                outflow_table.columns = ["転出先自治体", "人数（人）"]
+                outflow_table["人数（人）"] = outflow_table["人数（人）"].apply(lambda x: f"{x:,.0f}")
+                st.dataframe(outflow_table, use_container_width=True)
+            else:
+                st.info("データがありません。")
+
+
+# ============================================================
+# タブ4: 住宅着工統計
+# ============================================================
+with tab4:
     st.header("🏗️ 住宅着工統計（利用関係別・床面積）")
 
     if not df_housing.empty:
         y_min, y_max = year_range_housing
 
-        # 着工戸数（合計）
         st.subheader("1. 着工新設住宅 総戸数の推移")
         show_guide(
             "新設住宅着工戸数（合計）",
-            "国土交通省『建築着工統計調査』に基づく、その年に新たに建築工事が始まった住宅の戸数。",
+            "国土交通省『建築着工統計調査』に基づく、その年に工事が始まった新築住宅の総数。",
             "そのエリアで年間どれだけの住宅供給マーケットが存在するかの実寸大。景気・金利・資材価格の影響を直接反映します。",
-            "全体の波を把握しつつ、自社の受注シェア（自社年間棟数 ÷ 市の着工数）を測る分母として必須の指標です。"
+            "自社の受注シェア（自社年間棟数 ÷ 市の着工数）を測る分母として必須の指標です。"
         )
         df_starts_total = filter_df(df_housing, selected_codes, "H1800", y_min, y_max)
         if not df_starts_total.empty:
@@ -585,13 +735,12 @@ with tab3:
             st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
             download_button(pivot, "housing_starts_total.csv")
 
-        # 利用関係別 内訳
         st.subheader("2. 利用関係別の市場構成（持家・貸家・分譲）")
         show_guide(
             "利用関係別の分類（持家 / 貸家 / 分譲）",
-            "建築主と住宅の関係性による分類。①持家＝建築主が自分で住む、②貸家＝他人に貸す目的、③分譲＝販売目的（建売・マンション）。",
-            "【持家＝注文住宅市場】【貸家＝木造賃貸アパート・賃貸マンション市場】【分譲＝建売住宅・分譲マンション市場】のそれぞれの市場規模と勢いを示します。",
-            "・持家比率が高い市 ＝ 土地持ち施主や郊外型注文住宅が主戦場。\n・貸家が多い市 ＝ 相続税対策・資産運用アパートの提案適地。\n・分譲が急増している市 ＝ 土地価格高騰で注文住宅から建売に流れているエリア。建売分譲用地の仕入れターゲット。"
+            "①持家＝施主が自分で住む（注文住宅）、②貸家＝他人に貸す目的（アパート・賃貸）、③分譲＝販売目的（建売・分譲マンション）。",
+            "【持家＝注文住宅市場】【貸家＝木造賃貸アパート市場】【分譲＝建売・分譲マンション市場】の勢いを示します。",
+            "・持家比率が高い市 ＝ 土地持ち施主や郊外型注文住宅が主戦場。\n・貸家が多い市 ＝ 相続税対策・資産運用アパートの提案適地。\n・分譲が急増している市 ＝ 注文から建売に流れているエリア。建売分譲用地の仕入れターゲット。"
         )
 
         detail_city = st.selectbox(
@@ -629,20 +778,12 @@ with tab3:
                 st.dataframe(pivot_type.style.format("{:,.0f}"), use_container_width=True)
                 download_button(pivot_type, f"housing_starts_{detail_city}.csv")
 
-        # 3. 貸家着工の市間比較（賃貸アパート強化）
         st.subheader("3. 🏢 貸家（アパート・賃貸）着工戸数の市間比較")
-        show_guide(
-            "貸家着工戸数の比較",
-            "新たに建設されたアパート・賃貸住宅の戸数。",
-            "どの市町村でアパート建築が活発に行われているか。企業の工場・オフィス新設や駅前再開発に連動して急増する傾向があります。",
-            "新規事業『木造賃貸住宅（アパート）』の営業リソースを最優先で集中させるべきエリア選定の最重要データです。"
-        )
         df_kashiya = filter_df(df_housing, selected_codes, "H1802", y_min, y_max)
         if not df_kashiya.empty:
             fig = make_line_chart(df_kashiya, "貸家着工戸数の推移", "戸数")
             st.plotly_chart(fig, use_container_width=True)
 
-        # 4. 持家・分譲着工
         st.subheader("4. 🏡 持家（注文）および分譲（建売）の市間比較")
         df_mochiya = filter_df(df_housing, selected_codes, "H1801", y_min, y_max)
         if not df_mochiya.empty:
@@ -656,18 +797,17 @@ with tab3:
 
 
 # ============================================================
-# タブ4: 住宅ストック・空き家
+# タブ5: 住宅ストック・空き家
 # ============================================================
-with tab4:
+with tab5:
     st.header("🏘️ 住宅ストック・空き家（リフォーム需要）")
 
     if not df_housing.empty:
-        # 総住宅数と空き家
         st.subheader("1. 住宅ストック総数と空き家の推移")
         show_guide(
             "総住宅数・空き家数",
             "総務省『住宅・土地統計調査』（5年周期）に基づく既存住宅の現存戸数および空き家数。",
-            "過去に建てられた住宅の蓄積量。新築着工が減ってもストック総数は増えており、住宅事業の主戦場が『新築』から『維持・リフォーム』に移っている実態を示します。",
+            "新築着工が減ってもストック総数は増えており、住宅事業の主戦場が『新築』から『維持・リフォーム』に移っている実態を示します。",
             "空き家数が多い市は『中古住宅の買取再販』や『空き家解体後の分譲地化』『古民家リノベ』のターゲットです。"
         )
 
@@ -684,15 +824,7 @@ with tab4:
                 fig = make_bar_chart(df_vacant, "空き家数の推移（戸）", "戸数")
                 st.plotly_chart(fig, use_container_width=True)
 
-        # 木造 vs 非木造
         st.subheader("2. 木造 vs 非木造住宅ストック")
-        show_guide(
-            "木造住宅と非木造住宅の数",
-            "建物の骨組みによる分類。木造（在来工法・ツーバイフォー等）と非木造（鉄骨・RC・SRC等）。",
-            "地域の『木の家親和性』。愛知県三河地域は伝統的に木造戸建て比率が極めて高く、木造の技術力や耐震性能への関心が高い市場です。",
-            "木造比率の高いエリアは自社の木造建築ノウハウ（木造注文・木造アパート・木造リフォーム）がストレートに響きます。"
-        )
-
         detail_city2 = st.selectbox(
             "構造別内訳を見る市を選択してください",
             selected_cities,
@@ -720,12 +852,11 @@ with tab4:
                 )
                 st.plotly_chart(fig_struct, use_container_width=True)
 
-        # 築年数別ストック
         st.subheader("3. 🏚️ 築年数別住宅数（リフォーム潜在市場規模）")
         show_guide(
             "建築時期別住宅数",
             "いつ建てられた家が現存しているかの内訳（住宅・土地統計調査）。",
-            "【リフォーム需要の宝庫】一般に『築15〜20年＝外壁屋根塗装・給湯器交換』『築25〜35年＝水回り刷新・フルリフォーム』『築40年以上＝耐震改修・建て替え』の周期を迎えます。",
+            "『築15〜20年＝外壁塗装・給湯器』『築25〜35年＝水回り刷新・フルリフォーム』『築40年以上＝耐震改修・建て替え』の周期を迎えます。",
             "2000年以前（築25年以上）の住宅ストックが大量に存在する市は、リフォーム事業のチラシ投函・OB顧客掘り起こし・イベント開催の最重点エリアです。"
         )
 
@@ -780,9 +911,9 @@ with tab4:
 
 
 # ============================================================
-# タブ5: 初心者向け 指標解説ガイド
+# タブ6: 初心者向け 指標解説ガイド
 # ============================================================
-with tab5:
+with tab6:
     st.header("📖 住宅・不動産マーケティング指標の読み解きガイド")
     st.markdown(
         """
@@ -791,22 +922,35 @@ with tab5:
     )
 
     with st.container():
-        st.markdown("### 1. 人口・世帯データから何を読み取るか？")
+        st.markdown("### 1. 人口・世帯構造から何を読み取るか？")
         st.markdown(
             """
             - **総人口 vs 世帯数**
               - **基本原則:** 家を建てたり借りたりするのは「人」ではなく「世帯」です。
               - 人口が減っていても、核家族化・単身世帯の増加で**「世帯数が増加している市」は住宅需要が維持されます**。
-            - **年齢3区分（子ども・現役世代・シニア）**
-              - **15歳未満比率が高い市:** 30代〜40代の子育て一次取得層が集まるエリア ＝ **注文住宅・分譲住宅**の最重点商圏。
-              - **65歳以上比率が高い市:** 持ち家率が高く住み替えや建て替えが進まないエリア ＝ **フルリフォーム・減築・外壁塗装・バリアフリー**の提案が刺さる商圏。
-            - **社会増減（転入 － 転出）**
-              - 転入超過の市は、雇用や生活利便性が高く選ばれている街。賃貸アパートの入居率が高く保ちやすいです。
+            - **単身世帯（一人暮らし） vs 核家族世帯（ファミリー）**
+              - 単身世帯の急増エリア ＝ **木造賃貸アパート（ワンルーム〜1LDK）の最適地**。
+              - 核家族世帯が多いエリア ＝ **注文住宅・建売分譲住宅のメインターゲット**。
+            - **持ち家世帯 vs 借家世帯（現住居の所有形態）**
+              - **持ち家世帯:** リフォーム・外壁塗装・建て替え・相続アパート建築の対象。
+              - **借家（賃貸）世帯:** **将来の家づくり（注文・建売購入）の最有力見込み客**。この世帯が多い市ほど新築集客が効きます。
             """
         )
 
         st.markdown("---")
-        st.markdown("### 2. 住宅着工統計（利用関係別）で自社の攻め時を知る")
+        st.markdown("### 2. 人の移動（転入超過・流入元・流出先）")
+        st.markdown(
+            """
+            - **転入超過数（純増数）**
+              - `転入者数 － 転出者数`。プラスなら人口が他市から純流入、マイナスなら流出。
+              - 転入超過の市はアパートの空室リスクが低く、一次取得層が絶えず集まっています。
+            - **流入元・流出先（ODデータ）**
+              - 例: 「岡崎市に転入してくる人の多くは豊田市・安城市・名古屋市から来ている」と分かれば、展示場来場やWeb広告の配信エリアをどこに広げるべきかが明確になります。
+            """
+        )
+
+        st.markdown("---")
+        st.markdown("### 3. 住宅着工統計（利用関係別）で自社の攻め時を知る")
         st.markdown(
             """
             | 統計用語 | 業界での通称 | 事業における意味合い・営業アクション |
@@ -814,17 +958,6 @@ with tab5:
             | **持家（もちいえ）** | **注文住宅** | 施主が土地に自分の家を建てる。地主層・建替え層が多く、粗利率・顧客単価が高い。 |
             | **貸家（かしや）** | **アパート・賃貸** | **木造賃貸アパート等の市場規模**。節税対策や遊休地活用。急増している市は地主営業の好機。 |
             | **分譲住宅（ぶんじょう）** | **建売・分譲マンション** | 土地と建物をセットで販売。土地高騰時に注文から流れる層の受け皿。土地仕入れの目安。 |
-            """
-        )
-
-        st.markdown("---")
-        st.markdown("### 3. リフォーム・非住宅強化へのヒント")
-        st.markdown(
-            """
-            - **リフォームの狙い目（築20年以上のストック量）**
-              - 築20〜35年の住宅が多い自治体ほど、外壁塗装・屋根葺き替え・水回り設備刷新（キッチン・風呂）・断熱改修の潜在顧客が密集しています。
-            - **木造比率の高さ**
-              - 西三河・知多エリアは全国的にも木造住宅の比率が極めて高く、木造建築に対する信頼が厚い土壌があります。新たに展開する「木造賃貸住宅（アパート）」や「木造非住宅建築（店舗・福祉施設・事務所）」でも木造のコスト・工期・減価償却メリットをアピールしやすい商圏です。
             """
         )
 
@@ -837,9 +970,9 @@ st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; color: #888; font-size: 0.85em;">
-        📊 商圏エリアデータダッシュボード v1.1（UX改善＆解説強化版）<br>
+        📊 商圏エリアデータダッシュボード v1.2（世帯構造・所有形態・流入流出分析 強化版）<br>
         データ出典: <a href="https://www.e-stat.go.jp/" target="_blank">e-Stat（政府統計の総合窓口）</a>
-        ・社会・人口統計体系 市区町村データ
+        ・社会・人口統計体系 / 住民基本台帳人口移動報告（2022年）
     </div>
     """,
     unsafe_allow_html=True,
