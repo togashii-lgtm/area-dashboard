@@ -767,104 +767,108 @@ with tab3:
         # 流出データ
         outflow_df = city_od_filtered[city_od_filtered["flow_type"] == "転出先（流出先）"].sort_values("persons", ascending=False).head(top_n)
 
-        # Plotly Mapbox Figure
-        fig_map = go.Figure()
+        try:
+            # Plotly 6.x / 5.x 互換対応 (Plotly 6では Scattermapbox が Scattermap に移行)
+            use_new_plotly = hasattr(go, "Scattermap")
+            MapTraceClass = getattr(go, "Scattermap", None) or getattr(go, "Scattermapbox", None)
 
-        # 最大人数で太さを正規化（2px 〜 7px）
-        all_persons = []
-        if "流入元" in flow_display_mode or "両方" in flow_display_mode:
-            all_persons.extend(inflow_df["persons"].tolist())
-        if "流出先" in flow_display_mode or "両方" in flow_display_mode:
-            all_persons.extend(outflow_df["persons"].tolist())
-        max_p = max(all_persons) if all_persons else 1
+            fig_map = go.Figure()
 
-        def get_width(p):
-            return max(2.0, min(8.0, 2.0 + (p / max_p) * 6.0))
+            # 最大人数で太さを正規化（2px 〜 8px）
+            all_persons = []
+            if "流入元" in flow_display_mode or "両方" in flow_display_mode:
+                all_persons.extend(inflow_df["persons"].tolist())
+            if "流出先" in flow_display_mode or "両方" in flow_display_mode:
+                all_persons.extend(outflow_df["persons"].tolist())
+            max_p = max(all_persons) if all_persons else 1
 
-        # 1. 流入元ライン（青）
-        if "流入元" in flow_display_mode or "両方" in flow_display_mode:
-            for _, row in inflow_df.iterrows():
-                p_name = row["partner_name"]
-                p_count = row["persons"]
-                if p_name in MIGRATION_GEO_COORDS:
-                    p_lat, p_lon = MIGRATION_GEO_COORDS[p_name]
-                    # 直線
-                    fig_map.add_trace(go.Scattermapbox(
-                        mode="lines",
-                        lon=[p_lon, center_lon],
-                        lat=[p_lat, center_lat],
-                        line=dict(width=get_width(p_count), color="#1f77b4"),
-                        hoverinfo="text",
-                        text=f"📥 流入: {p_name} ➔ {selected_map_city} ({p_count:,} 人)",
-                        name=f"流入: {p_name}",
-                        showlegend=False
-                    ))
-                    # 相手拠点マーカー
-                    fig_map.add_trace(go.Scattermapbox(
-                        mode="markers+text",
-                        lon=[p_lon],
-                        lat=[p_lat],
-                        marker=dict(size=10, color="#1f77b4"),
-                        text=[f"{p_name}<br>({p_count:,}人)"],
-                        textposition="top center",
-                        hoverinfo="text",
-                        textfont=dict(size=11, color="#1f77b4"),
-                        showlegend=False
-                    ))
+            def get_width(p):
+                return max(2.0, min(8.0, 2.0 + (p / max_p) * 6.0))
 
-        # 2. 流出先ライン（オレンジ）
-        if "流出先" in flow_display_mode or "両方" in flow_display_mode:
-            for _, row in outflow_df.iterrows():
-                p_name = row["partner_name"]
-                p_count = row["persons"]
-                if p_name in MIGRATION_GEO_COORDS:
-                    p_lat, p_lon = MIGRATION_GEO_COORDS[p_name]
-                    fig_map.add_trace(go.Scattermapbox(
-                        mode="lines",
-                        lon=[center_lon, p_lon],
-                        lat=[center_lat, p_lat],
-                        line=dict(width=get_width(p_count), color="#ff7f0e"),
-                        hoverinfo="text",
-                        text=f"📤 流出: {selected_map_city} ➔ {p_name} ({p_count:,} 人)",
-                        name=f"流出: {p_name}",
-                        showlegend=False
-                    ))
-                    fig_map.add_trace(go.Scattermapbox(
-                        mode="markers+text",
-                        lon=[p_lon],
-                        lat=[p_lat],
-                        marker=dict(size=10, color="#ff7f0e"),
-                        text=[f"{p_name}<br>({p_count:,}人)"],
-                        textposition="bottom center",
-                        hoverinfo="text",
-                        textfont=dict(size=11, color="#d95f02"),
-                        showlegend=False
-                    ))
+            # 1. 流入元ライン（青）
+            if "流入元" in flow_display_mode or "両方" in flow_display_mode:
+                for _, row in inflow_df.iterrows():
+                    p_name = row["partner_name"]
+                    p_count = row["persons"]
+                    if p_name in MIGRATION_GEO_COORDS:
+                        p_lat, p_lon = MIGRATION_GEO_COORDS[p_name]
+                        fig_map.add_trace(MapTraceClass(
+                            mode="lines",
+                            lon=[p_lon, center_lon],
+                            lat=[p_lat, center_lat],
+                            line=dict(width=get_width(p_count), color="#1f77b4"),
+                            hoverinfo="text",
+                            text=f"📥 流入: {p_name} ➔ {selected_map_city} ({p_count:,} 人)",
+                            showlegend=False
+                        ))
+                        fig_map.add_trace(MapTraceClass(
+                            mode="markers+text",
+                            lon=[p_lon],
+                            lat=[p_lat],
+                            marker=dict(size=10, color="#1f77b4"),
+                            text=[f"{p_name}<br>({p_count:,}人)"],
+                            textposition="top center",
+                            hoverinfo="text",
+                            textfont=dict(size=11, color="#1f77b4"),
+                            showlegend=False
+                        ))
 
-        # 3. 基準市マーカー（中心・目立つ星型または大きめの赤丸）
-        fig_map.add_trace(go.Scattermapbox(
-            mode="markers+text",
-            lon=[center_lon],
-            lat=[center_lat],
-            marker=dict(size=16, color="#e41a1c"),
-            text=[f"📍 基準: {selected_map_city}"],
-            textposition="top right",
-            hoverinfo="text",
-            textfont=dict(size=13, color="#e41a1c", family="Arial Black"),
-            showlegend=False
-        ))
+            # 2. 流出先ライン（オレンジ）
+            if "流出先" in flow_display_mode or "両方" in flow_display_mode:
+                for _, row in outflow_df.iterrows():
+                    p_name = row["partner_name"]
+                    p_count = row["persons"]
+                    if p_name in MIGRATION_GEO_COORDS:
+                        p_lat, p_lon = MIGRATION_GEO_COORDS[p_name]
+                        fig_map.add_trace(MapTraceClass(
+                            mode="lines",
+                            lon=[center_lon, p_lon],
+                            lat=[center_lat, p_lat],
+                            line=dict(width=get_width(p_count), color="#ff7f0e"),
+                            hoverinfo="text",
+                            text=f"📤 流出: {selected_map_city} ➔ {p_name} ({p_count:,} 人)",
+                            showlegend=False
+                        ))
+                        fig_map.add_trace(MapTraceClass(
+                            mode="markers+text",
+                            lon=[p_lon],
+                            lat=[p_lat],
+                            marker=dict(size=10, color="#ff7f0e"),
+                            text=[f"{p_name}<br>({p_count:,}人)"],
+                            textposition="bottom center",
+                            hoverinfo="text",
+                            textfont=dict(size=11, color="#d95f02"),
+                            showlegend=False
+                        ))
 
-        # レイアウト設定
-        fig_map.update_layout(
-            mapbox=dict(
+            # 3. 基準市マーカー（中心・大きめの赤丸）
+            fig_map.add_trace(MapTraceClass(
+                mode="markers+text",
+                lon=[center_lon],
+                lat=[center_lat],
+                marker=dict(size=16, color="#e41a1c"),
+                text=[f"📍 基準: {selected_map_city}"],
+                textposition="top right",
+                hoverinfo="text",
+                textfont=dict(size=13, color="#e41a1c"),
+                showlegend=False
+            ))
+
+            # レイアウト更新（Plotly 6 / 5 互換）
+            map_cfg = dict(
                 style="carto-positron",
                 center=dict(lat=center_lat, lon=center_lon),
                 zoom=9.8,
-            ),
-            margin=dict(l=0, r=0, t=20, b=0),
-            height=480,
-        )
-        st.plotly_chart(fig_map, use_container_width=True)
+            )
+            if use_new_plotly:
+                fig_map.update_layout(map=map_cfg, margin=dict(l=0, r=0, t=20, b=0), height=480)
+            else:
+                fig_map.update_layout(mapbox=map_cfg, margin=dict(l=0, r=0, t=20, b=0), height=480)
+
+            st.plotly_chart(fig_map, use_container_width=True)
+
+        except Exception as map_err:
+            st.warning(f"⚠️ 地図表示コンポーネントの読み込みを調整しています: {map_err}")
 
         # ランキング表の並列表示
         st.markdown(f"##### 📊 {selected_map_city} の移動実績数値テーブル（2022年年報）")
