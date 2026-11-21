@@ -208,7 +208,7 @@ with st.sidebar:
     st.session_state["selected_cities"] = selected_cities
 
     st.markdown("---")
-    st.markdown("### 📊 表示期間の設定")
+    st.markdown("### 📊 時系列グラフの表示期間")
 
     year_range_pop = st.slider(
         "人口・世帯データの年範囲",
@@ -227,6 +227,7 @@ with st.sidebar:
     st.markdown("---")
     st.caption("データ出典: e-Stat（政府統計の総合窓口）")
     st.caption("・社会・人口統計体系（総務省統計局）")
+    st.caption("・建築着工統計調査（国土交通省）")
     st.caption("・住民基本台帳人口移動報告（2022年）")
 
 
@@ -356,96 +357,166 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 ])
 
 # ============================================================
-# タブ1: 概要・KPI
+# タブ1: 概要・KPI（期間選択：今年・前年・任意対応）
 # ============================================================
 with tab1:
-    st.header("📋 商圏サマリー・最新ランキング")
+    st.header("📋 商圏サマリー・ランキング")
     
     show_guide(
         "商圏サマリーとKPIの見方",
-        "最新年次の各市数値を合算・ランキング化したものです。",
+        "選択した年次（今年・前年・任意の年）の各市数値を合算・ランキング化したものです。",
         "選択した商圏全体の市場規模感（総人口・年間着工総数）と、どの自治体が最大のマーケットボリュームを持っているかが一目で分かります。",
         "着工戸数上位の市は『シェア拡大・主力営業エリア』、人口・世帯が増加している市は『木造賃貸アパートや分譲の新規開拓エリア』としてリソース配分を検討できます。"
     )
 
-    if not df_pop.empty and not df_housing.empty:
-        latest_pop = df_pop[
+    # 期間選択コントロール（今年・前年・任意）
+    if not df_housing.empty:
+        starts_years = sorted(df_housing["year"].dropna().astype(int).unique(), reverse=True)
+        max_year = starts_years[0] if starts_years else 2024
+        prev_year = starts_years[1] if len(starts_years) > 1 else max_year - 1
+
+        st.markdown("#### 📅 集計対象の年を選択")
+        period_col1, period_col2 = st.columns([2, 3])
+        with period_col1:
+            period_mode = st.radio(
+                "表示基準年",
+                [f"最新年（{max_year}年）", f"前年（{prev_year}年）", "任意の年を指定"],
+                horizontal=True,
+                key="summary_period_mode"
+            )
+
+        with period_col2:
+            if period_mode == f"最新年（{max_year}年）":
+                target_year = max_year
+            elif period_mode == f"前年（{prev_year}年）":
+                target_year = prev_year
+            else:
+                target_year = st.selectbox(
+                    "年を選択してください",
+                    starts_years,
+                    index=0,
+                    key="custom_target_year"
+                )
+
+        st.info(f"📌 現在 **【{target_year}年】** のデータを表示中")
+
+        # 人口データ（直近の国勢調査年を取得、または指定年に一番近い年）
+        pop_years = sorted(df_pop["year"].dropna().astype(int).unique(), reverse=True)
+        # 指定年以前で直近の人口調査年を探す
+        matched_pop_years = [y for y in pop_years if y <= target_year]
+        target_pop_year = matched_pop_years[0] if matched_pop_years else (pop_years[0] if pop_years else 2020)
+
+        # ターゲット年の着工データ
+        target_starts = df_housing[
+            (df_housing["city_code"].isin(selected_codes))
+            & (df_housing["year"].astype(int) == target_year)
+        ].copy()
+
+        # 前年の着工データ（前年比増減計算用）
+        prior_year = target_year - 1
+        prior_starts = df_housing[
+            (df_housing["city_code"].isin(selected_codes))
+            & (df_housing["year"].astype(int) == prior_year)
+        ].copy()
+
+        # ターゲット年の人口データ
+        target_pop = df_pop[
             (df_pop["city_code"].isin(selected_codes))
             & (df_pop["indicator_code"] == "A1101")
+            & (df_pop["year"].astype(int) == target_pop_year)
         ].copy()
-        if not latest_pop.empty:
-            latest_pop["year_int"] = latest_pop["year"].astype(int)
-            latest_year = latest_pop["year_int"].max()
-            latest_pop = latest_pop[latest_pop["year_int"] == latest_year]
 
-        latest_starts = df_housing[
-            (df_housing["city_code"].isin(selected_codes))
-            & (df_housing["indicator_code"] == "H1800")
-        ].copy()
-        if not latest_starts.empty:
-            latest_starts["year_int"] = latest_starts["year"].astype(int)
-            latest_starts_year = latest_starts["year_int"].max()
-            latest_starts = latest_starts[latest_starts["year_int"] == latest_starts_year]
+        # 数値集計
+        def get_sum(df, ind_code):
+            sub = df[df["indicator_code"] == ind_code]
+            return sub["value"].sum() if not sub.empty else 0
 
+        # 着工合計
+        tot_starts = get_sum(target_starts, "H1800")
+        prior_tot_starts = get_sum(prior_starts, "H1800")
+        diff_tot = tot_starts - prior_tot_starts if prior_tot_starts > 0 else None
+        pct_tot = (diff_tot / prior_tot_starts * 100) if (diff_tot is not None and prior_tot_starts > 0) else None
+
+        # 貸家着工
+        tot_kashiya = get_sum(target_starts, "H1802")
+        prior_kashiya = get_sum(prior_starts, "H1802")
+        diff_kashiya = tot_kashiya - prior_kashiya if prior_kashiya > 0 else None
+        pct_kashiya = (diff_kashiya / prior_kashiya * 100) if (diff_kashiya is not None and prior_kashiya > 0) else None
+
+        # 分譲住宅着工（建売＋マンション合算）
+        tot_bunjou = get_sum(target_starts, "H1803")
+        prior_bunjou = get_sum(prior_starts, "H1803")
+        diff_bunjou = tot_bunjou - prior_bunjou if prior_bunjou > 0 else None
+        pct_bunjou = (diff_bunjou / prior_bunjou * 100) if (diff_bunjou is not None and prior_bunjou > 0) else None
+
+        # 人口合計
+        tot_pop = target_pop["value"].sum() if not target_pop.empty else 0
+
+        # KPIカード表示
         kpi_col1, kpi_col2 = st.columns(2)
         with kpi_col1:
-            if not latest_pop.empty:
-                total_pop = latest_pop["value"].sum()
-                st.metric("総人口（選択市合計）", f"{total_pop:,.0f} 人", help=f"{latest_year}年時点の国勢調査人口")
+            st.metric(
+                "総人口（選択市合計）",
+                f"{tot_pop:,.0f} 人",
+                help=f"{target_pop_year}年時点の国勢調査人口（※人口統計は5年周期調査のため、{target_year}年時点に最も近い年を表示）"
+            )
         with kpi_col2:
-            if not latest_starts.empty:
-                total_starts = latest_starts["value"].sum()
-                st.metric("年間着工戸数（合計）", f"{total_starts:,.0f} 戸", help=f"{latest_starts_year}年 新設住宅着工総数")
+            delta_str = f"{diff_tot:+,.0f} 戸 ({pct_tot:+.1f}%)" if diff_tot is not None else None
+            st.metric(
+                f"年間着工戸数（{target_year}年 合計）",
+                f"{tot_starts:,.0f} 戸",
+                delta=delta_str,
+                help=f"{target_year}年 新設住宅着工総数（前年{prior_year}年比）"
+            )
 
         kpi_col3, kpi_col4 = st.columns(2)
         with kpi_col3:
-            if not latest_starts.empty:
-                latest_kashiya = df_housing[
-                    (df_housing["city_code"].isin(selected_codes))
-                    & (df_housing["indicator_code"] == "H1802")
-                ].copy()
-                latest_kashiya["year_int"] = latest_kashiya["year"].astype(int)
-                latest_kashiya = latest_kashiya[latest_kashiya["year_int"] == latest_starts_year]
-                total_kashiya = latest_kashiya["value"].sum()
-                st.metric("貸家着工（賃貸市場）", f"{total_kashiya:,.0f} 戸", help=f"{latest_starts_year}年 アパート等の着工数")
+            delta_kashiya = f"{diff_kashiya:+,.0f} 戸 ({pct_kashiya:+.1f}%)" if diff_kashiya is not None else None
+            st.metric(
+                f"貸家着工（{target_year}年 賃貸アパート等）",
+                f"{tot_kashiya:,.0f} 戸",
+                delta=delta_kashiya,
+                help=f"{target_year}年 アパート・賃貸住宅着工数（前年比）"
+            )
         with kpi_col4:
-            if not latest_starts.empty:
-                latest_bunjou = df_housing[
-                    (df_housing["city_code"].isin(selected_codes))
-                    & (df_housing["indicator_code"] == "H1803")
-                ].copy()
-                latest_bunjou["year_int"] = latest_bunjou["year"].astype(int)
-                latest_bunjou = latest_bunjou[latest_bunjou["year_int"] == latest_starts_year]
-                total_bunjou = latest_bunjou["value"].sum()
-                st.metric("分譲着工（建売・マンション）", f"{total_bunjou:,.0f} 戸", help=f"{latest_starts_year}年 分譲住宅着工数")
+            delta_bunjou = f"{diff_bunjou:+,.0f} 戸 ({pct_bunjou:+.1f}%)" if diff_bunjou is not None else None
+            st.metric(
+                f"分譲住宅（{target_year}年 建売＋マンション合算）",
+                f"{tot_bunjou:,.0f} 戸",
+                delta=delta_bunjou,
+                help=f"【国土交通省定義】分譲住宅着工数 ＝『建売一戸建て住宅』＋『分譲マンション（共同住宅）』の合算値です（前年比）。"
+            )
 
         st.markdown("---")
 
-        st.subheader("🏆 商圏内ランキング比較")
+        # ランキング表示（選択した年で集計）
+        st.subheader(f"🏆 商圏内ランキング比較（{target_year}年基準）")
         rank_col1, rank_col2 = st.columns(2)
 
         with rank_col1:
-            st.markdown(f"**人口規模ランキング（{latest_year}年）**")
-            if not latest_pop.empty:
-                rank_pop = latest_pop[["city_name", "value"]].sort_values("value", ascending=False).reset_index(drop=True)
+            st.markdown(f"**人口規模ランキング（{target_pop_year}年）**")
+            if not target_pop.empty:
+                rank_pop = target_pop[["city_name", "value"]].sort_values("value", ascending=False).reset_index(drop=True)
                 rank_pop.index = rank_pop.index + 1
                 rank_pop.columns = ["市名", "人口（人）"]
                 rank_pop["人口（人）"] = rank_pop["人口（人）"].apply(lambda x: f"{x:,.0f}")
                 st.dataframe(rank_pop, use_container_width=True)
 
         with rank_col2:
-            st.markdown(f"**新設住宅着工戸数ランキング（{latest_starts_year}年）**")
-            if not latest_starts.empty:
-                rank_starts = latest_starts[["city_name", "value"]].sort_values("value", ascending=False).reset_index(drop=True)
+            st.markdown(f"**新設住宅着工戸数ランキング（{target_year}年）**")
+            starts_sub = target_starts[target_starts["indicator_code"] == "H1800"]
+            if not starts_sub.empty:
+                rank_starts = starts_sub[["city_name", "value"]].sort_values("value", ascending=False).reset_index(drop=True)
                 rank_starts.index = rank_starts.index + 1
                 rank_starts.columns = ["市名", "着工数（戸）"]
                 rank_starts["着工数（戸）"] = rank_starts["着工数（戸）"].apply(lambda x: f"{x:,.0f}")
                 st.dataframe(rank_starts, use_container_width=True)
 
-        st.subheader(f"📊 着工新設住宅の商圏シェア（{latest_starts_year}年）")
-        if not latest_starts.empty:
+        # シェア円グラフ（選択した年で集計）
+        st.subheader(f"📊 着工新設住宅の商圏シェア（{target_year}年）")
+        if not starts_sub.empty:
             fig_share = px.pie(
-                latest_starts, values="value", names="city_name",
+                starts_sub, values="value", names="city_name",
                 color="city_name", color_discrete_map=CITY_COLORS,
             )
             fig_share.update_traces(textinfo="label+percent")
@@ -660,7 +731,6 @@ with tab3:
     if not df_od.empty and od_city:
         city_od_data = df_od[df_od["city_name"] == od_city].copy()
 
-        # 都道府県名や全国計の粗いデータを除外して市区町村レベルに絞る
         exclude_partners = ["全国", "愛知県", "北海道", "東京都", "大阪府", "神奈川県", "静岡県", "三重県", "岐阜県"]
         city_od_filtered = city_od_data[~city_od_data["partner_name"].isin(exclude_partners)].copy()
 
@@ -735,11 +805,11 @@ with tab4:
             st.dataframe(pivot.style.format("{:,.0f}"), use_container_width=True)
             download_button(pivot, "housing_starts_total.csv")
 
-        st.subheader("2. 利用関係別の市場構成（持家・貸家・分譲）")
+        st.subheader("2. 利用関係別の市場構成（持家・貸家・分譲住宅）")
         show_guide(
-            "利用関係別の分類（持家 / 貸家 / 分譲）",
-            "①持家＝施主が自分で住む（注文住宅）、②貸家＝他人に貸す目的（アパート・賃貸）、③分譲＝販売目的（建売・分譲マンション）。",
-            "【持家＝注文住宅市場】【貸家＝木造賃貸アパート市場】【分譲＝建売・分譲マンション市場】の勢いを示します。",
+            "利用関係別の分類（持家 / 貸家 / 分譲住宅）",
+            "①持家＝施主が自分で住む（注文住宅）、②貸家＝他人に貸す目的（アパート・賃貸）、③分譲住宅＝販売目的（建売住宅＋分譲マンション）。",
+            "【持家＝注文住宅市場】【貸家＝木造賃貸アパート市場】【分譲住宅＝建売・分譲マンション市場】の勢いを示します。",
             "・持家比率が高い市 ＝ 土地持ち施主や郊外型注文住宅が主戦場。\n・貸家が多い市 ＝ 相続税対策・資産運用アパートの提案適地。\n・分譲が急増している市 ＝ 注文から建売に流れているエリア。建売分譲用地の仕入れターゲット。"
         )
 
@@ -751,7 +821,7 @@ with tab4:
         detail_code = CITY_NAMES.get(detail_city, "")
 
         if detail_code:
-            type_codes = {"H1801": "持家(注文住宅)", "H1802": "貸家(アパート等)", "H1803": "分譲(建売等)"}
+            type_codes = {"H1801": "持家(注文住宅)", "H1802": "貸家(アパート等)", "H1803": "分譲住宅(建売＋マンション)"}
             df_by_type = filter_df_multi(
                 df_housing, [detail_code], list(type_codes.keys()), y_min, y_max
             )
@@ -763,7 +833,7 @@ with tab4:
                     barmode="stack",
                     title=f"{detail_city}：利用関係別の着工戸数推移",
                     labels={"year": "年", "value": "戸数", "type": "利用関係"},
-                    color_discrete_map={"持家(注文住宅)": "#1f77b4", "貸家(アパート等)": "#ff7f0e", "分譲(建売等)": "#2ca02c"},
+                    color_discrete_map={"持家(注文住宅)": "#1f77b4", "貸家(アパート等)": "#ff7f0e", "分譲住宅(建売＋マンション)": "#2ca02c"},
                 )
                 fig_type.update_layout(
                     height=380,
@@ -784,7 +854,7 @@ with tab4:
             fig = make_line_chart(df_kashiya, "貸家着工戸数の推移", "戸数")
             st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("4. 🏡 持家（注文）および分譲（建売）の市間比較")
+        st.subheader("4. 🏡 持家（注文）および分譲住宅の市間比較")
         df_mochiya = filter_df(df_housing, selected_codes, "H1801", y_min, y_max)
         if not df_mochiya.empty:
             fig_m = make_line_chart(df_mochiya, "持家（注文住宅）着工戸数の推移", "戸数")
@@ -792,7 +862,7 @@ with tab4:
 
         df_bunjou = filter_df(df_housing, selected_codes, "H1803", y_min, y_max)
         if not df_bunjou.empty:
-            fig_b = make_line_chart(df_bunjou, "分譲住宅着工戸数の推移", "戸数")
+            fig_b = make_line_chart(df_bunjou, "分譲住宅（建売＋マンション）着工戸数の推移", "戸数")
             st.plotly_chart(fig_b, use_container_width=True)
 
 
@@ -953,11 +1023,11 @@ with tab6:
         st.markdown("### 3. 住宅着工統計（利用関係別）で自社の攻め時を知る")
         st.markdown(
             """
-            | 統計用語 | 業界での通称 | 事業における意味合い・営業アクション |
+            | 統計用語 | 業界での通称 | 正式な内訳と事業における意味合い |
             | :--- | :--- | :--- |
-            | **持家（もちいえ）** | **注文住宅** | 施主が土地に自分の家を建てる。地主層・建替え層が多く、粗利率・顧客単価が高い。 |
+            | **持家（もちいえ）** | **注文住宅** | 施主が所有地または新規購入地に自分で住む家を建てる。地主層・建替え層が多く、粗利率・顧客単価が高い。 |
             | **貸家（かしや）** | **アパート・賃貸** | **木造賃貸アパート等の市場規模**。節税対策や遊休地活用。急増している市は地主営業の好機。 |
-            | **分譲住宅（ぶんじょう）** | **建売・分譲マンション** | 土地と建物をセットで販売。土地高騰時に注文から流れる層の受け皿。土地仕入れの目安。 |
+            | **分譲住宅（ぶんじょう）** | **建売 ＋ マンション** | **『建売一戸建て住宅』と『分譲マンション』の合算値**。土地価格高騰時に注文から流れる層の受け皿。 |
             """
         )
 
@@ -970,9 +1040,9 @@ st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; color: #888; font-size: 0.85em;">
-        📊 商圏エリアデータダッシュボード v1.2（世帯構造・所有形態・流入流出分析 強化版）<br>
+        📊 商圏エリアデータダッシュボード v1.3（期間任意選択・分譲表記統一版）<br>
         データ出典: <a href="https://www.e-stat.go.jp/" target="_blank">e-Stat（政府統計の総合窓口）</a>
-        ・社会・人口統計体系 / 住民基本台帳人口移動報告（2022年）
+        ・社会・人口統計体系 / 建築着工統計調査 / 住民基本台帳人口移動報告
     </div>
     """,
     unsafe_allow_html=True,
