@@ -1154,16 +1154,48 @@ with tab6:
     )
 
     if not df_subsidies.empty:
-        # フィルターエリア
-        filter_col1, filter_col2, filter_col3 = st.columns([2, 2, 3])
+        # エリア順定義（国 → 愛知県 → 各市町村五十音順）
+        area_order_keys = [
+            "全国",
+            "愛知県",
+            "安城市",
+            "大府市",
+            "岡崎市",
+            "刈谷市",
+            "高浜市",
+            "知多市",
+            "知立市",
+            "東海市",
+            "豊田市",
+            "西尾市",
+            "碧南市",
+        ]
+        area_display_options = [
+            "すべて（全エリアの制度を表示）",
+            "国（全国共通）",
+            "愛知県",
+            "安城市",
+            "大府市",
+            "岡崎市",
+            "刈谷市",
+            "高浜市",
+            "知多市",
+            "知立市",
+            "東海市",
+            "豊田市",
+            "西尾市",
+            "碧南市",
+        ]
 
-        all_target_areas = ["すべて"] + sorted(df_subsidies["target_area"].unique().tolist())
-        all_categories = ["すべて"] + sorted(df_subsidies["category"].unique().tolist())
+        # フィルターエリア
+        filter_col1, filter_col2, filter_col3 = st.columns([2.5, 2, 3])
+
+        all_categories = ["すべて（全ジャンル）"] + sorted(df_subsidies["category"].unique().tolist())
 
         with filter_col1:
             selected_sub_area = st.selectbox(
                 "対象エリア・自治体",
-                all_target_areas,
+                area_display_options,
                 index=0,
                 key="sub_area_filter"
             )
@@ -1186,18 +1218,28 @@ with tab6:
         # 絞り込み処理
         sub_filtered = df_subsidies.copy()
 
-        if selected_sub_area != "すべて":
+        # エリア絞り込み
+        if selected_sub_area == "国（全国共通）":
+            sub_filtered = sub_filtered[sub_filtered["target_area"].isin(["全国", "国"])]
+        elif selected_sub_area != "すべて（全エリアの制度を表示）":
             sub_filtered = sub_filtered[sub_filtered["target_area"] == selected_sub_area]
 
-        if selected_sub_cat != "すべて":
+        # ジャンル絞り込み
+        if selected_sub_cat != "すべて（全ジャンル）":
             sub_filtered = sub_filtered[sub_filtered["category"] == selected_sub_cat]
 
+        # キーワード絞り込み
         if search_kw:
             sub_filtered = sub_filtered[
                 sub_filtered["name"].str.contains(search_kw, na=False)
                 | sub_filtered["target_requirements"].str.contains(search_kw, na=False)
                 | sub_filtered["note"].str.contains(search_kw, na=False)
             ]
+
+        # 並び順の保証：国（全国）→ 愛知県 → 市町村（あいうえお順）
+        area_rank_map = {area: i for i, area in enumerate(area_order_keys)}
+        sub_filtered["area_rank"] = sub_filtered["target_area"].map(lambda x: area_rank_map.get(x, 99))
+        sub_filtered = sub_filtered.sort_values(by=["area_rank"]).reset_index(drop=True)
 
         st.caption(f"該当件数: {len(sub_filtered)} 件 / 全 {len(df_subsidies)} 件")
 
@@ -1246,11 +1288,13 @@ with tab6:
 
             st.markdown("---")
             # ダウンロードボタン
-            csv_sub_data = sub_filtered.to_csv(index=False, encoding="utf-8-sig")
+            export_cols = [c for c in sub_filtered.columns if c != "area_rank"]
+            csv_sub_data = sub_filtered[export_cols].to_csv(index=False, encoding="utf-8-sig")
+            safe_filename = selected_sub_area.split("（")[0]
             st.download_button(
                 label="📥 絞り込んだ補助金一覧をCSVダウンロード（社内提案書・チラシ用）",
                 data=csv_sub_data,
-                file_name=f"subsidies_{selected_sub_area}.csv",
+                file_name=f"subsidies_{safe_filename}.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
