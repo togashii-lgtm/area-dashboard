@@ -135,21 +135,89 @@ df_housing = data["housing"]
 df_od = data["migration_od"]
 
 # ============================================================
-# 市の定義
+# 市の定義＆地理座標（緯度・経度）
 # ============================================================
 
 CITIES = {
-    "23202": {"name": "岡崎市", "area": "西三河"},
-    "23209": {"name": "碧南市", "area": "西三河"},
-    "23210": {"name": "刈谷市", "area": "西三河"},
-    "23211": {"name": "豊田市", "area": "西三河"},
-    "23212": {"name": "安城市", "area": "西三河"},
-    "23213": {"name": "西尾市", "area": "西三河"},
-    "23222": {"name": "東海市", "area": "知多"},
-    "23223": {"name": "大府市", "area": "知多"},
-    "23224": {"name": "知多市", "area": "知多"},
-    "23225": {"name": "知立市", "area": "西三河"},
-    "23227": {"name": "高浜市", "area": "西三河"},
+    "23202": {"name": "岡崎市", "area": "西三河", "lat": 34.9554, "lon": 137.1729},
+    "23209": {"name": "碧南市", "area": "西三河", "lat": 34.8845, "lon": 136.9953},
+    "23210": {"name": "刈谷市", "area": "西三河", "lat": 34.9892, "lon": 136.9984},
+    "23211": {"name": "豊田市", "area": "西三河", "lat": 35.0831, "lon": 137.1558},
+    "23212": {"name": "安城市", "area": "西三河", "lat": 34.9599, "lon": 137.0805},
+    "23213": {"name": "西尾市", "area": "西三河", "lat": 34.8637, "lon": 137.0583},
+    "23222": {"name": "東海市", "area": "知多",   "lat": 35.0253, "lon": 136.9066},
+    "23223": {"name": "大府市", "area": "知多",   "lat": 35.0084, "lon": 136.9609},
+    "23224": {"name": "知多市", "area": "知多",   "lat": 34.9951, "lon": 136.8653},
+    "23225": {"name": "知立市", "area": "西三河", "lat": 35.0069, "lon": 137.0401},
+    "23227": {"name": "高浜市", "area": "西三河", "lat": 34.9272, "lon": 136.9896},
+}
+
+# 主な周辺自治体・移動元の緯度経度
+MIGRATION_GEO_COORDS = {
+    # 11市
+    "岡崎市": (34.9554, 137.1729),
+    "碧南市": (34.8845, 136.9953),
+    "刈谷市": (34.9892, 136.9984),
+    "豊田市": (35.0831, 137.1558),
+    "安城市": (34.9599, 137.0805),
+    "西尾市": (34.8637, 137.0583),
+    "東海市": (35.0253, 136.9066),
+    "大府市": (35.0084, 136.9609),
+    "知多市": (34.9951, 136.8653),
+    "知立市": (35.0069, 137.0401),
+    "高浜市": (34.9272, 136.9896),
+    # 名古屋市および各区
+    "名古屋市": (35.1815, 136.9064),
+    "緑区": (35.0862, 136.9658),
+    "南区": (35.0975, 136.9328),
+    "中区": (35.1709, 136.9077),
+    "天白区": (35.1294, 136.9856),
+    "名東区": (35.1742, 137.0089),
+    "熱田区": (35.1272, 136.9084),
+    "港区": (35.1086, 136.8833),
+    "瑞穂区": (35.1325, 136.9347),
+    "昭和区": (35.1481, 136.9367),
+    "千種区": (35.1664, 136.9500),
+    "東区": (35.1800, 136.9333),
+    "中村区": (35.1706, 136.8647),
+    "西区": (35.1950, 136.8850),
+    "北区": (35.2150, 136.9150),
+    "守山区": (35.2000, 136.9833),
+    "中川区": (35.1389, 136.8600),
+    # 近隣市町村
+    "みよし市": (35.0772, 137.0789),
+    "半田市": (34.8919, 136.9328),
+    "豊明市": (35.0531, 137.0142),
+    "日進市": (35.1311, 137.0433),
+    "東郷町": (35.0878, 137.0431),
+    "東浦町": (34.9753, 136.9697),
+    "阿久比町": (34.9317, 136.9189),
+    "武豊町": (34.8519, 136.9197),
+    "常滑市": (34.8872, 136.8378),
+    "幸田町": (34.8631, 137.1644),
+    "蒲郡市": (34.8275, 137.2217),
+    "豊川市": (34.8256, 137.3934),
+    "豊橋市": (34.7692, 137.3914),
+    "新城市": (34.9031, 137.4961),
+    "田原市": (34.6681, 137.2661),
+    "長久手市": (35.1833, 137.0500),
+    "瀬戸市": (35.2231, 137.0847),
+    "春日井市": (35.2472, 136.9728),
+    "小牧市": (35.2900, 136.9100),
+    "一宮市": (35.3083, 136.8000),
+    "津島市": (35.1767, 136.7267),
+    "愛西市": (35.1500, 136.7333),
+    "弥富市": (35.1139, 136.7236),
+    "あま市": (35.1917, 136.7972),
+    "清須市": (35.2000, 136.8500),
+    "北名古屋市": (35.2417, 136.8722),
+    # 広域主要地域
+    "東京都特別区部": (35.6895, 139.6917),
+    "浜松市": (34.7108, 137.7261),
+    "四日市市": (34.9653, 136.6247),
+    "桑名市": (35.0644, 136.6833),
+    "鈴鹿市": (34.8822, 136.5839),
+    "岐阜市": (35.4233, 136.7606),
 }
 
 CITY_NAMES = {v["name"]: k for k, v in CITIES.items()}
@@ -350,7 +418,7 @@ st.caption(f"選択中: {', '.join(selected_cities)}（計 {len(selected_cities)
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📋 概要・KPI",
     "👥 人口・世帯構造",
-    "🚚 人の移動（流入・流出分析）",
+    "🚚 人の移動（地図フローマップ）",
     "🏗️ 住宅着工統計",
     "🏘️ 住宅ストック・空き家",
     "📖 指標解説ガイド",
@@ -369,7 +437,6 @@ with tab1:
         "着工戸数上位の市は『シェア拡大・主力営業エリア』、人口・世帯が増加している市は『木造賃貸アパートや分譲の新規開拓エリア』としてリソース配分を検討できます。"
     )
 
-    # 期間選択コントロール（今年・前年・任意）
     if not df_housing.empty:
         starts_years = sorted(df_housing["year"].dropna().astype(int).unique(), reverse=True)
         max_year = starts_years[0] if starts_years else 2024
@@ -400,59 +467,48 @@ with tab1:
 
         st.info(f"📌 現在 **【{target_year}年】** のデータを表示中")
 
-        # 人口データ（直近の国勢調査年を取得、または指定年に一番近い年）
         pop_years = sorted(df_pop["year"].dropna().astype(int).unique(), reverse=True)
-        # 指定年以前で直近の人口調査年を探す
         matched_pop_years = [y for y in pop_years if y <= target_year]
         target_pop_year = matched_pop_years[0] if matched_pop_years else (pop_years[0] if pop_years else 2020)
 
-        # ターゲット年の着工データ
         target_starts = df_housing[
             (df_housing["city_code"].isin(selected_codes))
             & (df_housing["year"].astype(int) == target_year)
         ].copy()
 
-        # 前年の着工データ（前年比増減計算用）
         prior_year = target_year - 1
         prior_starts = df_housing[
             (df_housing["city_code"].isin(selected_codes))
             & (df_housing["year"].astype(int) == prior_year)
         ].copy()
 
-        # ターゲット年の人口データ
         target_pop = df_pop[
             (df_pop["city_code"].isin(selected_codes))
             & (df_pop["indicator_code"] == "A1101")
             & (df_pop["year"].astype(int) == target_pop_year)
         ].copy()
 
-        # 数値集計
         def get_sum(df, ind_code):
             sub = df[df["indicator_code"] == ind_code]
             return sub["value"].sum() if not sub.empty else 0
 
-        # 着工合計
         tot_starts = get_sum(target_starts, "H1800")
         prior_tot_starts = get_sum(prior_starts, "H1800")
         diff_tot = tot_starts - prior_tot_starts if prior_tot_starts > 0 else None
         pct_tot = (diff_tot / prior_tot_starts * 100) if (diff_tot is not None and prior_tot_starts > 0) else None
 
-        # 貸家着工
         tot_kashiya = get_sum(target_starts, "H1802")
         prior_kashiya = get_sum(prior_starts, "H1802")
         diff_kashiya = tot_kashiya - prior_kashiya if prior_kashiya > 0 else None
         pct_kashiya = (diff_kashiya / prior_kashiya * 100) if (diff_kashiya is not None and prior_kashiya > 0) else None
 
-        # 分譲住宅着工（建売＋マンション合算）
         tot_bunjou = get_sum(target_starts, "H1803")
         prior_bunjou = get_sum(prior_starts, "H1803")
         diff_bunjou = tot_bunjou - prior_bunjou if prior_bunjou > 0 else None
         pct_bunjou = (diff_bunjou / prior_bunjou * 100) if (diff_bunjou is not None and prior_bunjou > 0) else None
 
-        # 人口合計
         tot_pop = target_pop["value"].sum() if not target_pop.empty else 0
 
-        # KPIカード表示
         kpi_col1, kpi_col2 = st.columns(2)
         with kpi_col1:
             st.metric(
@@ -489,7 +545,6 @@ with tab1:
 
         st.markdown("---")
 
-        # ランキング表示（選択した年で集計）
         st.subheader(f"🏆 商圏内ランキング比較（{target_year}年基準）")
         rank_col1, rank_col2 = st.columns(2)
 
@@ -512,7 +567,6 @@ with tab1:
                 rank_starts["着工数（戸）"] = rank_starts["着工数（戸）"].apply(lambda x: f"{x:,.0f}")
                 st.dataframe(rank_starts, use_container_width=True)
 
-        # シェア円グラフ（選択した年で集計）
         st.subheader(f"📊 着工新設住宅の商圏シェア（{target_year}年）")
         if not starts_sub.empty:
             fig_share = px.pie(
@@ -537,7 +591,6 @@ with tab2:
     if not df_pop.empty:
         y_min, y_max = year_range_pop
 
-        # 1. 世帯数推移（一人暮らし vs ファミリー世帯）
         st.subheader("1. 世帯数推移と世帯構成（一人暮らし vs 家族）")
         show_guide(
             "単独世帯（一人暮らし）と核家族世帯（家族）",
@@ -588,7 +641,6 @@ with tab2:
 
         st.markdown("---")
 
-        # 2. 現住居の所有関係（持ち家世帯 vs 持ち家以外/借家世帯）
         st.subheader("2. 現住居の所有形態（持ち家世帯 vs 持ち家以外/賃貸世帯）")
         show_guide(
             "現住居の持ち家世帯数 vs 借家（持ち家以外）世帯数",
@@ -639,14 +691,12 @@ with tab2:
 
         st.markdown("---")
 
-        # 3. 総人口推移
         st.subheader("3. 総人口の推移")
         df_total_pop = filter_df(df_pop, selected_codes, "A1101", y_min, y_max)
         if not df_total_pop.empty:
             fig = make_line_chart(df_total_pop, "総人口の推移（人）", "人口（人）")
             st.plotly_chart(fig, use_container_width=True)
 
-        # 4. 年齢構成
         st.subheader("4. 年齢3区分（子育て世代・現役・シニア）")
         age_codes = {"A1301": "15歳未満(子育て層)", "A1302": "15-64歳(生産年齢)", "A1303": "65歳以上(シニア層)"}
         df_age = filter_df_multi(df_pop, selected_codes, list(age_codes.keys()), y_min, y_max)
@@ -673,13 +723,175 @@ with tab2:
 
 
 # ============================================================
-# タブ3: 人の移動（流入・流出分析＆転入超過）
+# タブ3: 人の移動（地図フローマップ＆転入超過）
 # ============================================================
 with tab3:
-    st.header("🚚 人の移動（転入超過・流入元・流出先分析）")
+    st.header("🚚 人の移動（地図フローマップ＆転入超過分析）")
 
-    # 1. 転入超過数（純移動数）
-    st.subheader("1. 社会増減数（転入超過数 ＝ ネットで何人増えたか？）")
+    # 1. 地図フローマップ
+    st.subheader("1. 🗺️ 市区町村別の人の移動フローマップ（どこから来て、どこへ行くか？）")
+    show_guide(
+        "地図フローマップの読み解き方",
+        "選択した市を中心に、近隣自治体との間で年間何人の移動が発生しているかを地図上に線で描画したものです。",
+        "・【青い線】流入元（その市へ引っ越してきた人）\n・【オレンジの線】流出先（その市から引っ越していった人）\n線の太さは人数規模に比例しています。",
+        "流入が多い自治体はチラシやWeb広告の重点配信先、流出が多い自治体は競合エリアや顧客奪回対策のヒントになります。"
+    )
+
+    map_city_col, map_mode_col, map_top_col = st.columns([2, 3, 2])
+    with map_city_col:
+        selected_map_city = st.selectbox(
+            "中心とする市を選択",
+            selected_cities,
+            key="map_city_select"
+        )
+    with map_mode_col:
+        flow_display_mode = st.radio(
+            "表示する移動",
+            ["📥 流入元のみ (どこから?)", "📤 流出先のみ (どこへ?)", "両方を表示"],
+            horizontal=True,
+            key="flow_display_mode"
+        )
+    with map_top_col:
+        top_n = st.slider("表示件数 (TOP N)", min_value=3, max_value=10, value=5, key="map_top_n")
+
+    if not df_od.empty and selected_map_city:
+        city_od_data = df_od[df_od["city_name"] == selected_map_city].copy()
+        exclude_partners = ["全国", "愛知県", "北海道", "東京都", "大阪府", "神奈川県", "静岡県", "三重県", "岐阜県"]
+        city_od_filtered = city_od_data[~city_od_data["partner_name"].isin(exclude_partners)].copy()
+
+        # 基準市の座標
+        center_lat, center_lon = MIGRATION_GEO_COORDS.get(selected_map_city, (34.9892, 136.9984))
+
+        # 流入データ
+        inflow_df = city_od_filtered[city_od_filtered["flow_type"] == "転入元（流入元）"].sort_values("persons", ascending=False).head(top_n)
+        # 流出データ
+        outflow_df = city_od_filtered[city_od_filtered["flow_type"] == "転出先（流出先）"].sort_values("persons", ascending=False).head(top_n)
+
+        # Plotly Mapbox Figure
+        fig_map = go.Figure()
+
+        # 最大人数で太さを正規化（2px 〜 7px）
+        all_persons = []
+        if "流入元" in flow_display_mode or "両方" in flow_display_mode:
+            all_persons.extend(inflow_df["persons"].tolist())
+        if "流出先" in flow_display_mode or "両方" in flow_display_mode:
+            all_persons.extend(outflow_df["persons"].tolist())
+        max_p = max(all_persons) if all_persons else 1
+
+        def get_width(p):
+            return max(2.0, min(8.0, 2.0 + (p / max_p) * 6.0))
+
+        # 1. 流入元ライン（青）
+        if "流入元" in flow_display_mode or "両方" in flow_display_mode:
+            for _, row in inflow_df.iterrows():
+                p_name = row["partner_name"]
+                p_count = row["persons"]
+                if p_name in MIGRATION_GEO_COORDS:
+                    p_lat, p_lon = MIGRATION_GEO_COORDS[p_name]
+                    # 直線
+                    fig_map.add_trace(go.Scattermapbox(
+                        mode="lines",
+                        lon=[p_lon, center_lon],
+                        lat=[p_lat, center_lat],
+                        line=dict(width=get_width(p_count), color="#1f77b4"),
+                        hoverinfo="text",
+                        text=f"📥 流入: {p_name} ➔ {selected_map_city} ({p_count:,} 人)",
+                        name=f"流入: {p_name}",
+                        showlegend=False
+                    ))
+                    # 相手拠点マーカー
+                    fig_map.add_trace(go.Scattermapbox(
+                        mode="markers+text",
+                        lon=[p_lon],
+                        lat=[p_lat],
+                        marker=dict(size=10, color="#1f77b4"),
+                        text=[f"{p_name}<br>({p_count:,}人)"],
+                        textposition="top center",
+                        hoverinfo="text",
+                        textfont=dict(size=11, color="#1f77b4"),
+                        showlegend=False
+                    ))
+
+        # 2. 流出先ライン（オレンジ）
+        if "流出先" in flow_display_mode or "両方" in flow_display_mode:
+            for _, row in outflow_df.iterrows():
+                p_name = row["partner_name"]
+                p_count = row["persons"]
+                if p_name in MIGRATION_GEO_COORDS:
+                    p_lat, p_lon = MIGRATION_GEO_COORDS[p_name]
+                    fig_map.add_trace(go.Scattermapbox(
+                        mode="lines",
+                        lon=[center_lon, p_lon],
+                        lat=[center_lat, p_lat],
+                        line=dict(width=get_width(p_count), color="#ff7f0e"),
+                        hoverinfo="text",
+                        text=f"📤 流出: {selected_map_city} ➔ {p_name} ({p_count:,} 人)",
+                        name=f"流出: {p_name}",
+                        showlegend=False
+                    ))
+                    fig_map.add_trace(go.Scattermapbox(
+                        mode="markers+text",
+                        lon=[p_lon],
+                        lat=[p_lat],
+                        marker=dict(size=10, color="#ff7f0e"),
+                        text=[f"{p_name}<br>({p_count:,}人)"],
+                        textposition="bottom center",
+                        hoverinfo="text",
+                        textfont=dict(size=11, color="#d95f02"),
+                        showlegend=False
+                    ))
+
+        # 3. 基準市マーカー（中心・目立つ星型または大きめの赤丸）
+        fig_map.add_trace(go.Scattermapbox(
+            mode="markers+text",
+            lon=[center_lon],
+            lat=[center_lat],
+            marker=dict(size=16, color="#e41a1c"),
+            text=[f"📍 基準: {selected_map_city}"],
+            textposition="top right",
+            hoverinfo="text",
+            textfont=dict(size=13, color="#e41a1c", family="Arial Black"),
+            showlegend=False
+        ))
+
+        # レイアウト設定
+        fig_map.update_layout(
+            mapbox=dict(
+                style="carto-positron",
+                center=dict(lat=center_lat, lon=center_lon),
+                zoom=9.8,
+            ),
+            margin=dict(l=0, r=0, t=20, b=0),
+            height=480,
+        )
+        st.plotly_chart(fig_map, use_container_width=True)
+
+        # ランキング表の並列表示
+        st.markdown(f"##### 📊 {selected_map_city} の移動実績数値テーブル（2022年年報）")
+        col_tbl_in, col_tbl_out = st.columns(2)
+        with col_tbl_in:
+            st.markdown(f"**📥 【流入元】{selected_map_city} に引っ越してきた自治体 TOP10**")
+            in_full = city_od_filtered[city_od_filtered["flow_type"] == "転入元（流入元）"].sort_values("persons", ascending=False).head(10)
+            if not in_full.empty:
+                in_tbl = in_full[["partner_name", "persons"]].reset_index(drop=True)
+                in_tbl.index = in_tbl.index + 1
+                in_tbl.columns = ["転入元自治体", "人数（人）"]
+                in_tbl["人数（人）"] = in_tbl["人数（人）"].apply(lambda x: f"{x:,.0f}")
+                st.dataframe(in_tbl, use_container_width=True)
+        with col_tbl_out:
+            st.markdown(f"**📤 【流出先】{selected_map_city} から引っ越していった自治体 TOP10**")
+            out_full = city_od_filtered[city_od_filtered["flow_type"] == "転出先（流出先）"].sort_values("persons", ascending=False).head(10)
+            if not out_full.empty:
+                out_tbl = out_full[["partner_name", "persons"]].reset_index(drop=True)
+                out_tbl.index = out_tbl.index + 1
+                out_tbl.columns = ["転出先自治体", "人数（人）"]
+                out_tbl["人数（人）"] = out_tbl["人数（人）"].apply(lambda x: f"{x:,.0f}")
+                st.dataframe(out_tbl, use_container_width=True)
+
+    st.markdown("---")
+
+    # 2. 転入超過数（純移動数）
+    st.subheader("2. 社会増減数（年間 転入超過数 ＝ ネットで何人増えたか？）")
     show_guide(
         "転入超過数（ネット純移動数）の意味",
         "【計算式】転入超過数 ＝ 転入者数（引っ越してきた人） － 転出者数（出ていった人）。年間で他自治体から差し引き何人増減したかを表します。",
@@ -710,75 +922,6 @@ with tab3:
         pivot_net = make_pivot_table(df_net_mig)
         st.dataframe(pivot_net.style.format("{:+,.0f}"), use_container_width=True)
         download_button(pivot_net, "net_migration.csv")
-
-    st.markdown("---")
-
-    # 2. 市区町村別の流入元・流出先分析 (ODデータ)
-    st.subheader("2. 📍 市区町村別の『流入元』と『流出先』（どこから来て、どこへ行くか？）")
-    show_guide(
-        "移動元・移動先（ODデータ）の読み解き方",
-        "総務省統計局『住民基本台帳人口移動報告（2022年年報）』に基づく、市区町村間の具体的な人の流れ（どこから引っ越してきたか／どこへ引っ越していったか）。",
-        "自社の商圏で家を建てる・借りる人が『近隣のどの市や名古屋市から流入しているのか』『周辺のどの市へ流出しているのか』の勢力図が分かります。",
-        "・流入元上位の市 ＝ チラシ配布・Web広告（ポータル・SNS）の配信ターゲットエリア。\n・流出先上位の市 ＝ 商圏外へ競合や地価高騰で逃げられているエリア。分譲用地の仕入れや競合対策のヒント。"
-    )
-
-    od_city = st.selectbox(
-        "流入元・流出先を詳しく調べる市を選択してください",
-        selected_cities,
-        key="od_city_select"
-    )
-
-    if not df_od.empty and od_city:
-        city_od_data = df_od[df_od["city_name"] == od_city].copy()
-
-        exclude_partners = ["全国", "愛知県", "北海道", "東京都", "大阪府", "神奈川県", "静岡県", "三重県", "岐阜県"]
-        city_od_filtered = city_od_data[~city_od_data["partner_name"].isin(exclude_partners)].copy()
-
-        col_inflow, col_outflow = st.columns(2)
-
-        with col_inflow:
-            st.markdown(f"**📥 【流入元】{od_city} に引っ越してきた自治体 TOP10**")
-            inflow_df = city_od_filtered[city_od_filtered["flow_type"] == "転入元（流入元）"].sort_values("persons", ascending=False).head(10)
-            if not inflow_df.empty:
-                fig_in = px.bar(
-                    inflow_df.sort_values("persons", ascending=True),
-                    x="persons", y="partner_name", orientation="h",
-                    title=f"{od_city} への転入元自治体 TOP10（2022年）",
-                    labels={"persons": "人数（人）", "partner_name": "転入元の自治体"},
-                    color_discrete_sequence=["#1f77b4"],
-                )
-                fig_in.update_layout(height=350, margin=dict(l=10, r=10, t=35, b=20))
-                st.plotly_chart(fig_in, use_container_width=True)
-
-                inflow_table = inflow_df[["partner_name", "persons"]].reset_index(drop=True)
-                inflow_table.index = inflow_table.index + 1
-                inflow_table.columns = ["転入元自治体", "人数（人）"]
-                inflow_table["人数（人）"] = inflow_table["人数（人）"].apply(lambda x: f"{x:,.0f}")
-                st.dataframe(inflow_table, use_container_width=True)
-            else:
-                st.info("データがありません。")
-
-        with col_outflow:
-            st.markdown(f"**📤 【流出先】{od_city} から引っ越していった自治体 TOP10**")
-            outflow_df = city_od_filtered[city_od_filtered["flow_type"] == "転出先（流出先）"].sort_values("persons", ascending=False).head(10)
-            if not outflow_df.empty:
-                fig_out = px.bar(
-                    outflow_df.sort_values("persons", ascending=True),
-                    x="persons", y="partner_name", orientation="h",
-                    title=f"{od_city} からの転出先自治体 TOP10（2022年）",
-                    labels={"persons": "人数（人）", "partner_name": "転出先の自治体"},
-                    color_discrete_sequence=["#ff7f0e"],
-                )
-                fig_out.update_layout(height=350, margin=dict(l=10, r=10, t=35, b=20))
-                st.plotly_chart(fig_out, use_container_width=True)
-
-                outflow_table = outflow_df[["partner_name", "persons"]].reset_index(drop=True)
-                outflow_table.index = outflow_table.index + 1
-                outflow_table.columns = ["転出先自治体", "人数（人）"]
-                outflow_table["人数（人）"] = outflow_table["人数（人）"].apply(lambda x: f"{x:,.0f}")
-                st.dataframe(outflow_table, use_container_width=True)
-            else:
-                st.info("データがありません。")
 
 
 # ============================================================
@@ -1040,9 +1183,9 @@ st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; color: #888; font-size: 0.85em;">
-        📊 商圏エリアデータダッシュボード v1.3（期間任意選択・分譲表記統一版）<br>
+        📊 商圏エリアデータダッシュボード v1.4（地図フローマップ実装版）<br>
         データ出典: <a href="https://www.e-stat.go.jp/" target="_blank">e-Stat（政府統計の総合窓口）</a>
-        ・社会・人口統計体系 / 建築着工統計調査 / 住民基本台帳人口移動報告
+        ・社会・人口統計体系 / 建築着工統計調査 / 住民基本台帳人口移動報告（2022年）
     </div>
     """,
     unsafe_allow_html=True,
